@@ -13,7 +13,6 @@ Ta integracija omogoča nadzor in avtomatizacijo prezračevalnih sistemov i-Vent
 * **Upravljanje z urniki:** Vklop in izklop obstoječih urnikov, nastavljenih v i-Vent aplikaciji.  
 * **Administrativne funkcije:** Preimenovanje, brisanje in ustvarjanje skupin ter premikanje enot neposredno iz Home Assistanta.
 
-\<\!-- Naložite sliko zaslona v mapo 'images' v vašem repozitoriju \--\>
 
 ## **Namestitev**
 
