@@ -1,0 +1,86 @@
+create_group:
+  name: Ustvari skupino
+  description: Ustvari novo prezračevalno skupino.
+  fields:
+    name:
+      name: Ime
+      description: Ime nove skupine.
+      required: true
+      example: "Dnevna soba"
+      selector:
+        text:
+
+delete_group:
+  name: Izbriši skupino
+  description: Izbriše obstoječo prezračevalno skupino.
+  fields:
+    group_id:
+      name: ID skupine
+      description: Numerični ID skupine, ki jo želite izbrisati.
+      required: true
+      example: 12345
+      selector:
+        number:
+          min: 0
+          mode: box
+
+rename_group:
+  name: Preimenuj skupino
+  description: Preimenuje obstoječo prezračevalno skupino.
+  fields:
+    group_id:
+      name: ID skupine
+      description: Numerični ID skupine, ki jo želite preimenovati.
+      required: true
+      example: 12345
+      selector:
+        number:
+          min: 0
+          mode: box
+    new_name:
+      name: Novo ime
+      description: Novo ime za skupino.
+      required: true
+      example: "Glavna spalnica"
+      selector:
+        text:
+
+rename_device:
+  name: Preimenuj enoto
+  description: Preimenuje posamezno fizično enoto.
+  fields:
+    device_mac:
+      name: MAC naslov enote
+      description: MAC naslov enote, ki jo želite preimenovati.
+      required: true
+      example: "AA:BB:CC:DD:EE:FF"
+      selector:
+        text:
+    new_name:
+      name: Novo ime
+      description: Novo ime za enoto.
+      required: true
+      example: "Spalnica - Enota pri oknu"
+      selector:
+        text:
+
+move_device_to_group:
+  name: Premakni enoto v skupino
+  description: Premakne posamezno fizično enoto v drugo skupino.
+  fields:
+    device_mac:
+      name: MAC naslov enote
+      description: MAC naslov enote, ki jo želite premakniti.
+      required: true
+      example: "AA:BB:CC:DD:EE:FF"
+      selector:
+        text:
+    group_id:
+      name: ID ciljne skupine
+      description: Numerični ID skupine, v katero želite premakniti enoto.
+      required: true
+      example: 54321
+      selector:
+        number:
+          min: 0
+          mode: box
