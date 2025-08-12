@@ -11,7 +11,7 @@ Ta integracija omogoča nadzor in avtomatizacijo prezračevalnih sistemov i-Vent
 * **Dodatne kontrole:** Stikala za LED lučke, zvočne signale in obratni tok zraka za posamezne enote.  
 * **Senzorji:** Spremljanje moči Wi-Fi signala (RSSI) in stanja naprave (opozorila za napake ali čiščenje filtrov) za vsako enoto.  
 * **Upravljanje z urniki:** Vklop in izklop obstoječih urnikov, nastavljenih v i-Vent aplikaciji.  
-* **Administrativne funkcije:** Preimenovanje, brisanje in ustvarjanje skupin ter premikanje enot neposredno iz Home Assistanta.
+* **Administrativne funkcije:** Preimenovanje in brisanje skupine ter premikanje enot neposredno iz Home Assistanta.
 
 
 ## **Namestitev**
