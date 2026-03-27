@@ -24,10 +24,13 @@ ATTR_FIRMWARE: Final = "firmware_version"
 
 # API vrednosti za posebne načine
 API_MODE_SPECIAL_OFF = "IVentSpecialOff"
-API_MODE_NIGHT = "IVentNight1"
+API_MODE_NIGHT1 = "IVentNight1"
+API_MODE_NIGHT2 = "IVentNight2"
 API_MODE_SNOOZE = "IVentSnooze"
 API_MODE_BOOST = "IVentBoost"
 
 # API vrednosti za delovne načine
 API_MODE_WORK_OFF = "IVentWorkOff"
+API_MODE_WORK_ON = "IVentOn"
+API_MODE_WORK_CUSTOM = "IVentCustom"
 API_MODE_DEFAULT_ON = "IVentRecuperation1" # Privzeto ob vklopu

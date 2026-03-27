@@ -10,10 +10,11 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
-    DOMAIN, 
-    API_MODE_SPECIAL_OFF, 
-    API_MODE_NIGHT, 
-    API_MODE_SNOOZE, 
+    DOMAIN,
+    API_MODE_SPECIAL_OFF,
+    API_MODE_NIGHT1,
+    API_MODE_NIGHT2,
+    API_MODE_SNOOZE,
     API_MODE_BOOST
 )
 from .entity import IVentGroupEntity
@@ -40,7 +41,8 @@ async def async_setup_entry(
         if group.get("id") is None: continue
         entities.append(IVentLedSwitch(coordinator, group))
         entities.append(IVentBuzzerSwitch(coordinator, group))
-        entities.append(IVentSpecialModeSwitch(coordinator, group, "Nočni način", API_MODE_NIGHT, "mdi:weather-night"))
+        entities.append(IVentSpecialModeSwitch(coordinator, group, "Nočni način 1", API_MODE_NIGHT1, "mdi:weather-night"))
+        entities.append(IVentSpecialModeSwitch(coordinator, group, "Nočni način 2", API_MODE_NIGHT2, "mdi:weather-night"))
         entities.append(IVentSpecialModeSwitch(coordinator, group, "Dremež", API_MODE_SNOOZE, "mdi:timer-sand"))
         entities.append(IVentSpecialModeSwitch(coordinator, group, "Boost", API_MODE_BOOST, "mdi:fan-plus"))
         
