@@ -1,0 +1,795 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "i-Vent Smart Home Cloud API",
+    "description": "",
+    "license": {
+      "name": ""
+    },
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://cloud.i-vent.com/api/v1",
+      "description": "Cloud API"
+    }
+  ],
+  "paths": {
+    "/live/{loc_id}/create_group": {
+      "post": {
+        "tags": [
+          "Live"
+        ],
+        "summary": "Create a new group with a random id",
+        "operationId": "create_group",
+        "parameters": [
+          {
+            "name": "loc_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateGroupReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "No error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateGroupRes"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/live/{loc_id}/info": {
+      "get": {
+        "tags": [
+          "Live"
+        ],
+        "summary": "Get overall system state including a list of all groups and devices. Should be polled.",
+        "operationId": "get_info",
+        "parameters": [
+          {
+            "name": "loc_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "No error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveInfo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/live/{loc_id}/modify_device": {
+      "post": {
+        "tags": [
+          "Live"
+        ],
+        "summary": "Modify a specific device",
+        "operationId": "modify_device",
+        "parameters": [
+          {
+            "name": "loc_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModifyDeviceReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "No error"
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/live/{loc_id}/modify_group": {
+      "post": {
+        "tags": [
+          "Live"
+        ],
+        "summary": "Modify group settings or send remote control commands.",
+        "operationId": "modify_group",
+        "parameters": [
+          {
+            "name": "loc_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModifyGroupReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "No error"
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/live/{loc_id}/modify_schedules": {
+      "post": {
+        "tags": [
+          "Live"
+        ],
+        "summary": "Modify scheduled actions",
+        "operationId": "modify_schedules",
+        "parameters": [
+          {
+            "name": "loc_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModifySchedulesReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "No error"
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/live/{loc_id}/schedules": {
+      "get": {
+        "tags": [
+          "Live"
+        ],
+        "summary": "Get a list of schedules for a given location.",
+        "operationId": "get_schedules",
+        "parameters": [
+          {
+            "name": "loc_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "No error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LiveGroupSchedule"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    }
+  },
+  "security": [
+    {
+      "api_key": []
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "api_key": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "API_KEY"
+      }
+    },
+    "schemas": {
+      "BuzzerWorkMode": {
+        "type": "string",
+        "enum": [
+          "BuzzerOffMode",
+          "BuzzerOnMode",
+          "BuzzerDebugMode",
+          "BuzzerOffWithErrMode",
+          "BuzzerOnMuteErrMode"
+        ]
+      },
+      "BypassRotation": {
+        "type": "string",
+        "enum": [
+          "BypassForward",
+          "BypassReverse"
+        ]
+      },
+      "CreateGroupReq": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateGroupRes": {
+        "type": "object",
+        "required": [
+          "group_id"
+        ],
+        "properties": {
+          "group_id": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "GroupSchedules": {
+        "type": "object",
+        "required": [
+          "group_id",
+          "enable_schedules",
+          "schedules"
+        ],
+        "properties": {
+          "enable_schedules": {
+            "type": "boolean"
+          },
+          "group_id": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "schedules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScheduleItem"
+            }
+          }
+        }
+      },
+      "IVentSpecialMode": {
+        "type": "string",
+        "enum": [
+          "IVentSpecialOff",
+          "IVentBoost",
+          "IVentSnooze",
+          "IVentNight1",
+          "IVentNight2"
+        ]
+      },
+      "IVentWorkMode": {
+        "type": "string",
+        "enum": [
+          "IVentWorkOff",
+          "IVentOn",
+          "IVentCustom",
+          "IVentRecuperation1",
+          "IVentRecuperation2",
+          "IVentRecuperation3",
+          "IVentBypass1",
+          "IVentBypass2",
+          "IVentBypass3"
+        ]
+      },
+      "LedWorkMode": {
+        "type": "string",
+        "enum": [
+          "LedOffMode",
+          "LedOnMode",
+          "LedDebugMode",
+          "LedOffWithErrMode"
+        ]
+      },
+      "LiveDevice": {
+        "type": "object",
+        "required": [
+          "mac_address",
+          "rssi",
+          "alive",
+          "reverse_flow",
+          "device_name",
+          "firmware_version",
+          "status_esp"
+        ],
+        "properties": {
+          "alive": {
+            "type": "boolean"
+          },
+          "device_name": {
+            "type": "string"
+          },
+          "firmware_version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "mac_address": {
+            "type": "string"
+          },
+          "reverse_flow": {
+            "type": "boolean"
+          },
+          "rssi": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "status_esp": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "LiveGroup": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "remote",
+          "enable_schedule",
+          "led_work_mode",
+          "buzzer_work_mode",
+          "devices"
+        ],
+        "properties": {
+          "buzzer_work_mode": {
+            "$ref": "#/components/schemas/BuzzerWorkMode"
+          },
+          "devices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LiveDevice"
+            }
+          },
+          "enable_schedule": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "led_work_mode": {
+            "$ref": "#/components/schemas/LedWorkMode"
+          },
+          "name": {
+            "type": "string"
+          },
+          "remote": {
+            "$ref": "#/components/schemas/RemoteControlMessageType"
+          }
+        }
+      },
+      "LiveGroupSchedule": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "enable_schedule",
+          "schedules"
+        ],
+        "properties": {
+          "enable_schedule": {
+            "type": "boolean",
+            "description": "Whether this group has the \"schedules\" feature enabled"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string"
+          },
+          "schedules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScheduleItem"
+            }
+          }
+        }
+      },
+      "LiveInfo": {
+        "type": "object",
+        "required": [
+          "network_hash",
+          "groups"
+        ],
+        "properties": {
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LiveGroup"
+            }
+          },
+          "network_hash": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "ModifyDeviceReq": {
+        "type": "object",
+        "required": [
+          "device_mac"
+        ],
+        "properties": {
+          "device_mac": {
+            "type": "string",
+            "description": "The target device mac address"
+          },
+          "group_id": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Move device to another group",
+            "nullable": true,
+            "minimum": 0
+          },
+          "name": {
+            "type": "string",
+            "description": "Rename the device",
+            "nullable": true
+          },
+          "reverse_flow": {
+            "type": "boolean",
+            "description": "Invert device fan direction",
+            "nullable": true
+          }
+        }
+      },
+      "ModifyGroupReq": {
+        "type": "object",
+        "required": [
+          "group_id"
+        ],
+        "properties": {
+          "buzzer_mode": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BuzzerWorkMode"
+              }
+            ],
+            "nullable": true
+          },
+          "delete": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "group_id": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "led_mode": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LedWorkMode"
+              }
+            ],
+            "nullable": true
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "remote_work_mode": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RemoteControlMessageTypeWrite"
+              }
+            ],
+            "nullable": true
+          }
+        }
+      },
+      "ModifySchedulesReq": {
+        "type": "object",
+        "required": [
+          "schedules"
+        ],
+        "properties": {
+          "schedules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GroupSchedules"
+            }
+          }
+        }
+      },
+      "RemoteControlMessageType": {
+        "type": "object",
+        "required": [
+          "special_mode",
+          "work_mode",
+          "bypass_rotation",
+          "remote_control_work_mode",
+          "remote_control_speed",
+          "special_mode_ends_at"
+        ],
+        "properties": {
+          "bypass_rotation": {
+            "$ref": "#/components/schemas/BypassRotation"
+          },
+          "current_mode_duration_in": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Used during airflow direction calculation. Must be set by the device, never sent by App.",
+            "nullable": true,
+            "minimum": 0
+          },
+          "current_mode_duration_out": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Used during airflow direction calculation. Must be set by the device, never sent by App.",
+            "nullable": true,
+            "minimum": 0
+          },
+          "remote_control_speed": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The speed selected (1,2,3). Used to persist speed selection through toggling ON/OFF.",
+            "minimum": 0
+          },
+          "remote_control_work_mode": {
+            "$ref": "#/components/schemas/RemoteControlWorkMode"
+          },
+          "special_mode": {
+            "$ref": "#/components/schemas/IVentSpecialMode"
+          },
+          "special_mode_ends_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The timestamp when the special mode ends. Set by the device according to its Group profile settings.",
+            "minimum": 0
+          },
+          "work_mode": {
+            "$ref": "#/components/schemas/IVentWorkMode"
+          },
+          "work_mode_changed_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The timestamp when the workMode was last changed. This is used by the app and device to calculate airflow direction using the airflow direction formula.",
+            "nullable": true,
+            "minimum": 0
+          }
+        }
+      },
+      "RemoteControlMessageTypeWrite": {
+        "type": "object",
+        "required": [
+          "special_mode",
+          "work_mode",
+          "bypass_rotation",
+          "remote_control_work_mode",
+          "remote_control_speed"
+        ],
+        "properties": {
+          "bypass_rotation": {
+            "$ref": "#/components/schemas/BypassRotation"
+          },
+          "remote_control_speed": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The speed selected (1,2,3). Used to persist speed selection through toggling ON/OFF.",
+            "minimum": 0
+          },
+          "remote_control_work_mode": {
+            "$ref": "#/components/schemas/RemoteControlWorkMode"
+          },
+          "special_mode": {
+            "$ref": "#/components/schemas/IVentSpecialMode"
+          },
+          "work_mode": {
+            "$ref": "#/components/schemas/IVentWorkMode"
+          }
+        }
+      },
+      "RemoteControlWorkMode": {
+        "type": "string",
+        "description": "Remote control state",
+        "enum": [
+          "Normal",
+          "Bypass"
+        ]
+      },
+      "ScheduleAction": {
+        "type": "object",
+        "description": "What action should fire",
+        "required": [
+          "special_mode",
+          "work_mode"
+        ],
+        "properties": {
+          "special_mode": {
+            "$ref": "#/components/schemas/IVentSpecialMode"
+          },
+          "work_mode": {
+            "$ref": "#/components/schemas/IVentWorkMode"
+          }
+        }
+      },
+      "ScheduleHeader": {
+        "type": "object",
+        "description": "5 bit header",
+        "required": [
+          "schedule_item_enabled"
+        ],
+        "properties": {
+          "schedule_item_enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ScheduleItem": {
+        "type": "object",
+        "required": [
+          "header",
+          "action",
+          "repeat",
+          "meta"
+        ],
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/ScheduleAction"
+          },
+          "header": {
+            "$ref": "#/components/schemas/ScheduleHeader"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ScheduleMeta"
+          },
+          "repeat": {
+            "$ref": "#/components/schemas/ScheduleRepeat"
+          }
+        }
+      },
+      "ScheduleMeta": {
+        "type": "object",
+        "required": [
+          "schedule_type",
+          "schedule_id",
+          "last_modified"
+        ],
+        "properties": {
+          "last_modified": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Must be changed when a schedule is modified, set across all groups to allow catching up in case one group falls behind.\n\"catch up\" is automatically perfomed by the app or cloud, but it must be set correctly whenever you edit a schedule.\nUnit: Seconds since UTC 0 (1970-01-01)",
+            "minimum": 0
+          },
+          "schedule_id": {
+            "type": "integer",
+            "format": "int32",
+            "description": "24 bits random schedule id, used to identify identical schedules between groups. Must not be changed once set.",
+            "minimum": 0
+          },
+          "schedule_type": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The group of the schedule (Schedule groups in app)",
+            "minimum": 0
+          }
+        }
+      },
+      "ScheduleRepeat": {
+        "type": "object",
+        "required": [
+          "days",
+          "hour",
+          "minute"
+        ],
+        "properties": {
+          "days": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Days the schedule is active. 8 bit value, each bit corresponds to one day (bit 0 high = monday is enabled, bit 1 high = tuesday and so on)",
+            "minimum": 0
+          },
+          "hour": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Which hour (in 24 hour time) the schedule should activate at",
+            "minimum": 0
+          },
+          "minute": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Which minute should the schedule fire at",
+            "minimum": 0
+          }
+        }
+      }
+    }
+  }
+}
