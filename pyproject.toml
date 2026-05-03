@@ -1,0 +1,92 @@
+[tool.mypy]
+# ---------------------------------------------------------------------------
+# i-Vent Home Assistant custom component — mypy configuration
+# Targets: Platinum quality scale / HA strict-typing rule
+# ---------------------------------------------------------------------------
+python_version = "3.13"
+platform = "linux"
+
+# --- Strictness ---
+strict = true
+
+# Dovoli Any samo kjer je res nujno (npr. aiohttp odgovori)
+warn_return_any = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unreachable = true
+
+# --- Imports ---
+# homeassistant stubs niso popolni; ignoriramo manjkajoče stube za 3rd-party
+ignore_missing_imports = true
+follow_imports = "silent"
+
+# --- Output ---
+show_error_codes = true
+show_column_numbers = true
+pretty = true
+
+# ---------------------------------------------------------------------------
+# Per-module overrides
+# ---------------------------------------------------------------------------
+
+# HA core nima popolnih stubov → ne preverjamo
+[[tool.mypy.overrides]]
+module = "homeassistant.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "pytest_homeassistant_custom_component.*"
+ignore_errors = true
+
+# aiohttp nima vseh return type annotacij
+[[tool.mypy.overrides]]
+module = "aiohttp.*"
+ignore_missing_imports = true
+
+# Testne datoteke — ohlapnejše pravilo (brez strict)
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_untyped_calls = false
+warn_return_any = false
+
+# HA nima popolnih stubov za nekatere re-eksporte (DeviceInfo, EntityCategory).
+# Ignoriramo attr-defined napake ki so posledica manjkajočih HA stubov.
+# Naše lastne napake (no-untyped-def, no-any-return) ostanejo aktivne.
+[[tool.mypy.overrides]]
+module = "custom_components.ivent.sensor"
+disable_error_codes = ["attr-defined"]
+
+[[tool.mypy.overrides]]
+module = "custom_components.ivent.binary_sensor"
+disable_error_codes = ["attr-defined"]
+
+[[tool.mypy.overrides]]
+module = "custom_components.ivent.select"
+disable_error_codes = ["attr-defined"]
+
+[[tool.mypy.overrides]]
+module = "custom_components.ivent.button"
+disable_error_codes = ["attr-defined"]
+
+[[tool.mypy.overrides]]
+module = "custom_components.ivent.switch"
+disable_error_codes = ["attr-defined"]
+
+[[tool.mypy.overrides]]
+module = "custom_components.ivent.text"
+disable_error_codes = ["attr-defined"]
+
+[[tool.mypy.overrides]]
+module = "custom_components.ivent.fan"
+# async_turn_on signature mismatch je posledica HA FanEntity stub napake
+disable_error_codes = ["override", "attr-defined"]
+
+[[tool.mypy.overrides]]
+module = "custom_components.ivent.config_flow"
+# HA FlowResult / FlowResultDict niso popolnoma stubirani
+disable_error_codes = ["return-value", "assignment"]
+
+[tool.pytest.ini_options]
+# (preseljeno iz pytest.ini za enotno konfiguracijo)
+asyncio_mode = "auto"
