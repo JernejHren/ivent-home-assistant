@@ -13,7 +13,6 @@ PLATFORMS: Final = [
 ]
 
 # Konfiguracijske vrednosti
-CONF_API_KEY: Final = "api_key"
 CONF_LOCATION_ID: Final = "location_id"
 
 # Atributi

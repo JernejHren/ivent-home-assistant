@@ -1,0 +1,62 @@
+rules:
+  # BRONZE
+  action-setup: done
+  appropriate-polling: done
+  brands: done
+  common-modules: done
+  config-flow-test-coverage: done
+  config-flow: done
+  dependency-transparency: done
+  docs-actions: done
+  docs-high-level-description: done
+  docs-installation-instructions: done
+  # SILVER
+  action-exceptions: done
+  config-entry-unloading: done
+  docs-configuration-parameters: done
+  docs-installation-parameters: done
+  entity-unavailable: done
+  integration-owner: done
+  log-when-unavailable: done
+  parallel-updates: done
+  reauthentication-flow: done
+  test-coverage: done
+  # GOLD
+  devices: done
+  diagnostics: done
+  discovery-update-info:
+    status: exempt
+    comment: Cloud API ne podpira device discovery.
+  docs-data-update: done
+  docs-known-limitations: done
+  docs-supported-devices: done
+  docs-supported-functions: done
+  docs-troubleshooting: done
+  docs-use-cases: done
+  dynamic-devices:
+    status: partial
+    comment: >
+      Devices are dynamically discovered and added. Group rename propagates via
+      DeviceInfo refresh on coordinator update. Entity re-registration handles
+      new groups/devices appearing after initial setup.
+  entity-category: done
+  entity-device-class: done
+  entity-disabled-by-default: done
+  entity-translations: done
+  exception-translations: done
+  icon-translations: done
+  reconfiguration-flow: done
+  repair-issues:
+    status: exempt
+    comment: Napake se rešijo z reautentikacijo, ne z repair.
+  stale-devices:
+    status: partial
+    comment: >
+      Implemented with (DOMAIN, identifier) tuple-sets and race condition
+      protection via last_update_success check. Stale schedule entities
+      are also cleaned up from the entity registry.
+  test-before-configure: done
+  # PLATINUM
+  async-dependency: done
+  inject-websession: done
+  strict-typing: done

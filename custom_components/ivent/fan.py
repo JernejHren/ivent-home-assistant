@@ -1,18 +1,19 @@
 """Podpora za i-Vent ventilatorje (skupine)."""
-from typing import Any, Dict
+from __future__ import annotations
+
+from typing import Any
 
 from homeassistant.components.fan import FanEntity, FanEntityFeature
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import (
-    DOMAIN,
-    ATTR_GROUP_ID,
-    ATTR_DEVICES,
-    API_MODE_WORK_OFF,
-)
+from .const import DOMAIN, ATTR_GROUP_ID, ATTR_DEVICES, API_MODE_WORK_OFF
+from .coordinator import IVentCoordinator, IVentGroupData
 from .entity import IVentGroupEntity
+
+PARALLEL_UPDATES = 1
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -20,87 +21,145 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Nastavi fan entitete iz konfiguracijskega vnosa."""
-    coordinator = hass.data[DOMAIN][entry.entry_id]
-    info_data = coordinator.data.get("info", {})
-    
-    async_add_entities(
-        IVentFan(coordinator, group)
-        for group in info_data.get("groups", []) if group.get("id") is not None
-    )
+    data = hass.data[DOMAIN][entry.entry_id]
+    coordinator: IVentCoordinator = data["coordinator"]
+
+    added_entities: set[str] = set()
+
+    def _add_new_entities() -> None:
+        if coordinator.data is None:
+             return
+        
+        new_entities: list[FanEntity] = []
+
+        entry_id = coordinator.config_entry.entry_id
+
+        for group in coordinator.data.groups_by_id.values():
+            uid = f"{entry_id}_{group.id}_fan"
+            if uid not in added_entities:
+                added_entities.add(uid)
+                new_entities.append(IVentFan(coordinator, group))
+                 
+        if new_entities:
+            async_add_entities(new_entities)
+
+    _add_new_entities()
+    entry.async_on_unload(coordinator.async_add_listener(_add_new_entities))
 
 
 class IVentFan(IVentGroupEntity, FanEntity):
     """Predstavlja i-Vent ventilator (logično skupino) kot stikalo za VKLOP/IZKLOP."""
 
-    _attr_supported_features = FanEntityFeature.TURN_ON | FanEntityFeature.TURN_OFF
+    _attr_supported_features = (
+        FanEntityFeature.TURN_ON
+        | FanEntityFeature.TURN_OFF
+        | FanEntityFeature.SET_SPEED
+        | FanEntityFeature.PRESET_MODE
+    )
+    _attr_preset_modes = ["Normal", "Bypass"]
 
-    def __init__(self, coordinator, group_data: Dict[str, Any]):
+    def __init__(self, coordinator: IVentCoordinator, group_data: IVentGroupData) -> None:
         super().__init__(coordinator, group_data)
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{self._group_id}_fan"
-        self._attr_name = "Ventilator"
+        self._attr_translation_key = "fan_main"
         self._update_state()
 
-    def _prepare_fan_payload(self, changes: Dict[str, Any]) -> Dict[str, Any]:
-        """Lokalna funkcija za pripravo payload-a samo za ventilator."""
-        payload = self._remote_data.copy()
-        payload.update(changes)
-        
-        final_payload = {
-            "work_mode": payload.get("work_mode", "IVentRecuperation1"),
-            "special_mode": payload.get("special_mode", "IVentSpecialOff"),
-            "remote_control_speed": payload.get("remote_control_speed", 1),
-            "remote_control_work_mode": payload.get("remote_control_work_mode", "Normal"),
-            "bypass_rotation": payload.get("bypass_rotation", "BypassForward"),
-        }
-        
-        return {"remote_work_mode": final_payload}
-
-    def _update_state(self):
-        """Posodobi interno stanje na podlagi novih podatkov."""
-        self._work_mode = self._remote_data.get("work_mode")
-        devices = self._group_data.get("devices", [])
+    def _update_state(self) -> None:
+        """Posodobi atribute iz koordinatorjevih podatkov."""
+        group = self._group
+        if group is None:
+            return
         self._attr_extra_state_attributes = {
             ATTR_GROUP_ID: self._group_id,
-            ATTR_DEVICES: [d.get("mac_address") for d in devices],
+            ATTR_DEVICES: group.device_macs,
         }
 
     @property
     def is_on(self) -> bool:
-        """Vrne True, če je ventilator vklopljen."""
-        return self._work_mode != API_MODE_WORK_OFF
+        group = self._group
+        actual = group is not None and group.work_mode != API_MODE_WORK_OFF
+        return self._get_optimistic_attr("is_on", actual)  # type: ignore[no-any-return]
 
-    async def async_turn_on(self, speed_percentage: int | None = None, preset_mode: str | None = None, **kwargs: Any) -> None:
-        """Vklopi ventilator."""
-        try:
-            speed = self._remote_data.get("remote_control_speed", 1) if speed_percentage is None else self._percentage_to_speed(speed_percentage)
-            vent_mode = self._remote_data.get("remote_control_work_mode", "Normal") if preset_mode is None else preset_mode
-            vent_mode_str = "Recuperation" if vent_mode == "Normal" else "Bypass"
-            new_work_mode = f"IVent{vent_mode_str}{speed}"
+    @property
+    def percentage(self) -> int | None:
+        group = self._group
+        if not group or group.work_mode == API_MODE_WORK_OFF:
+            return 0
+        actual = self._speed_to_percentage(group.remote_control_speed)
+        return self._get_optimistic_attr("percentage", actual)  # type: ignore[no-any-return]
 
-            payload = self._prepare_fan_payload({"work_mode": new_work_mode})
-            await self.coordinator.client.async_modify_group(self._group_id, payload)
-            await self.coordinator.async_request_refresh()
-        except Exception as err:
-            _LOGGER.error(f"Error turning on fan: {err}")
-            raise
+    @property
+    def preset_mode(self) -> str | None:
+        group = self._group
+        if not group:
+            return None
+        actual = group.remote_control_work_mode
+        return self._get_optimistic_attr("preset_mode", actual)  # type: ignore[no-any-return]
+
+    async def async_turn_on(
+        self,
+        percentage: int | None = None,
+        preset_mode: str | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """Vklopi ventilator z uporabo HA 2024+ `percentage` API."""
+        if percentage == 0:
+            await self.async_turn_off()
+            return
+
+        group = self._group
+        if group is None:
+            return
+        speed = (
+            group.remote_control_speed
+            if percentage is None
+            else self._percentage_to_speed(percentage)
+        )
+        vent_mode = (
+            group.remote_control_work_mode if preset_mode is None else preset_mode
+        )
+        vent_mode_str = "Recuperation" if vent_mode == "Normal" else "Bypass"
+        new_work_mode = f"IVent{vent_mode_str}{speed}"
+        payload = self._prepare_payload({"work_mode": new_work_mode})
+
+        updates: dict[str, Any] = {"is_on": True}
+        if preset_mode is not None:
+            updates["preset_mode"] = preset_mode
+        if percentage is not None:
+            updates["percentage"] = percentage
+
+        await self._async_handle_writes(updates, self.async_update_group(payload))
+
+    async def async_set_percentage(self, percentage: int) -> None:
+        """Set fan speed percentage.
+
+        Required when advertising SET_SPEED feature; otherwise HA uses the
+        base implementation that raises NotImplementedError in a background task.
+        """
+        if percentage == 0:
+            await self.async_turn_off()
+            return
+        await self.async_turn_on(percentage=percentage)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Izklopi ventilator."""
-        try:
-            payload = self._prepare_fan_payload({"work_mode": API_MODE_WORK_OFF})
-            await self.coordinator.client.async_modify_group(self._group_id, payload)
-            await self.coordinator.async_request_refresh()
-        except Exception as err:
-            _LOGGER.error(f"Error turning off fan: {err}")
-            raise
+        payload = self._prepare_payload({"work_mode": API_MODE_WORK_OFF})
+        await self._async_handle_write("is_on", False, self.async_update_group(payload))
 
-    def _percentage_to_speed(self, percentage: int | None) -> int:
-        """Pretvori odstotek hitrosti v stopnjo (1, 2, 3)."""
-        if percentage is None:
+    @staticmethod
+    def _percentage_to_speed(percentage: int | None) -> int:
+        if percentage is None or percentage == 0:
             return 1
         if percentage <= 33:
             return 1
-        elif percentage <= 66:
+        if percentage <= 66:
             return 2
-        else:
-            return 3
+        return 3
+
+    @staticmethod
+    def _speed_to_percentage(speed: int) -> int:
+        if speed == 2:
+            return 66
+        if speed == 3:
+            return 100
+        return 33

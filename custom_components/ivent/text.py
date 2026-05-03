@@ -1,14 +1,19 @@
 """Podpora za i-Vent vnosna polja."""
-from typing import Any, Dict
+from __future__ import annotations
 
+import time
 from homeassistant.components.text import TextEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity, DataUpdateCoordinator
 
 from .const import DOMAIN
+from .coordinator import IVentCoordinator, IVentGroupData, IVentDeviceData
+from .entity import IVentGroupEntity, IVentDeviceEntity
+
+PARALLEL_UPDATES = 1
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -16,100 +21,81 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Nastavi text entitete iz konfiguracijskega vnosa."""
-    coordinator: DataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
-    info_data = coordinator.data.get("info", {})
+    data = hass.data[DOMAIN][entry.entry_id]
+    coordinator: IVentCoordinator = data["coordinator"]
 
-    entities = []
-    all_devices = {}
+    added_entities: set[str] = set()
 
-    for group in info_data.get("groups", []):
-        entities.append(IVentGroupNameText(coordinator, group))
-        for device in group.get("devices", []):
-            if device["mac_address"] not in all_devices:
-                all_devices[device["mac_address"]] = device
-                entities.append(IVentDeviceNameText(coordinator, device))
+    def _add_new_entities() -> None:
+        if coordinator.data is None:
+            return
+            
+        new_entities: list[TextEntity] = []
 
-    async_add_entities(entities)
+        entry_id = coordinator.config_entry.entry_id
+
+        for group in coordinator.data.groups_by_id.values():
+            uid = f"{entry_id}_{group.id}_rename"
+            if uid not in added_entities:
+                added_entities.add(uid)
+                new_entities.append(IVentGroupNameText(coordinator, group))
+
+        for device in coordinator.data.devices_by_mac.values():
+            uid = f"{device.mac_address}_rename"
+            if uid not in added_entities:
+                added_entities.add(uid)
+                new_entities.append(IVentDeviceNameText(coordinator, device))
+
+        if new_entities:
+            async_add_entities(new_entities)
+
+    _add_new_entities()
+    entry.async_on_unload(coordinator.async_add_listener(_add_new_entities))
 
 
-class IVentGroupNameText(CoordinatorEntity, TextEntity):
-    """Predstavlja polje za preimenovanje skupine."""
+class IVentGroupNameText(IVentGroupEntity, TextEntity):
+    """Polje za preimenovanje skupine.
 
-    _attr_has_entity_name = True
+    unique_id: {entry_id}_{group_id}_rename  (stable — group_id is immutable API int)
+    """
 
-    def __init__(self, coordinator: DataUpdateCoordinator, group_data: Dict[str, Any]):
-        """Inicializira polje."""
-        super().__init__(coordinator)
-        self._group_id = group_data["id"]
-        self._group_data = group_data
-        
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, f"{coordinator.config_entry.entry_id}_{self._group_id}")}
-        }
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_icon = "mdi:rename-box"
+
+    def __init__(self, coordinator: IVentCoordinator, group_data: IVentGroupData) -> None:
+        super().__init__(coordinator, group_data)
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{self._group_id}_rename"
-        self._attr_name = "Ime skupine"
-        self._attr_icon = "mdi:rename-box"
+        self._attr_translation_key = "group_name"
 
     @property
-    def native_value(self) -> str:
-        """Vrne trenutno ime skupine."""
-        return self._group_data.get("name")
+    def native_value(self) -> str | None:
+        group = self._group
+        actual = group.name if group else None
+        return self._get_optimistic_attr("native_value", actual)  # type: ignore[no-any-return]
 
     async def async_set_value(self, value: str) -> None:
-        """Nastavi novo ime skupine."""
-        await self.coordinator.client.async_modify_group(self._group_id, {"name": value})
-        await self.coordinator.async_request_refresh()
-
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        """Posodobi stanje."""
-        info_data = self.coordinator.data.get("info", {})
-        for group in info_data.get("groups", []):
-            if group["id"] == self._group_id:
-                self._group_data = group
-                self.async_write_ha_state()
-                break
+        await self._async_handle_write("native_value", value, self.async_update_group({"name": value}))
 
 
-class IVentDeviceNameText(CoordinatorEntity, TextEntity):
-    """Predstavlja polje za preimenovanje fizične enote."""
+class IVentDeviceNameText(IVentDeviceEntity, TextEntity):
+    """Polje za preimenovanje fizične enote.
 
-    _attr_has_entity_name = True
+    unique_id: {mac_address}_rename  (stable — MAC never changes)
+    """
 
-    def __init__(self, coordinator: DataUpdateCoordinator, device_data: Dict[str, Any]):
-        """Inicializira polje."""
-        super().__init__(coordinator)
-        self._device_mac = device_data["mac_address"]
-        self._device_data = device_data
-        
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, self._device_mac)},
-        )
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_icon = "mdi:rename-box"
+
+    def __init__(self, coordinator: IVentCoordinator, device_data: IVentDeviceData) -> None:
+        super().__init__(coordinator, device_data)
         self._attr_unique_id = f"{self._device_mac}_rename"
-        self._attr_name = "Ime enote"
-        self._attr_icon = "mdi:rename-box"
+        self._attr_translation_key = "device_name"
 
     @property
-    def native_value(self) -> str:
-        """Vrne trenutno ime enote."""
-        return self._device_data.get("device_name")
+    def native_value(self) -> str | None:
+        device = self._device
+        actual = device.device_name if device else None
+        return self._get_optimistic_attr("native_value", actual)  # type: ignore[no-any-return]
 
     async def async_set_value(self, value: str) -> None:
-        """Nastavi novo ime enote."""
-        await self.coordinator.client.async_modify_device(self._device_mac, {"name": value})
-        await self.coordinator.async_request_refresh()
-
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        """Posodobi stanje."""
-        info_data = self.coordinator.data.get("info", {})
-        updated = False
-        for group in info_data.get("groups", []):
-            for device in group.get("devices", []):
-                if device["mac_address"] == self._device_mac:
-                    self._device_data = device
-                    updated = True
-                    break
-            if updated:
-                break
-        self.async_write_ha_state()
+        await self._async_handle_write("native_value", value, self.async_update_device({"name": value}))

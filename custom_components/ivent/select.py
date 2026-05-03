@@ -1,17 +1,17 @@
 """Podpora za i-Vent izbirnike."""
-from typing import Any, Dict
+from __future__ import annotations
 
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
-from .entity import IVentGroupEntity
+from .coordinator import IVentCoordinator, IVentGroupData, IVentDeviceData
+from .entity import IVentGroupEntity, IVentDeviceEntity
 
-# --- Izbirnik za način prezračevanja ---
+# --- Ventilation mode maps ---
 VENTILATION_MODE_NORMAL = "Normal"
 VENTILATION_MODE_BYPASS = "Bypass"
 HA_MODE_RECUPERATION = "Rekuperacija"
@@ -19,9 +19,12 @@ HA_MODE_BYPASS = "Prezračevanje (Bypass)"
 API_TO_HA_MODE_MAP = {VENTILATION_MODE_NORMAL: HA_MODE_RECUPERATION, VENTILATION_MODE_BYPASS: HA_MODE_BYPASS}
 HA_TO_API_MODE_MAP = {v: k for k, v in API_TO_HA_MODE_MAP.items()}
 
-# --- Izbirnik za hitrost ---
+# --- Speed maps ---
 SPEED_MAP = {"Stopnja 1": 1, "Stopnja 2": 2, "Stopnja 3": 3}
 SPEED_MAP_REV = {v: k for k, v in SPEED_MAP.items()}
+
+PARALLEL_UPDATES = 1
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -29,106 +32,160 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Nastavi select entitete iz konfiguracijskega vnosa."""
-    coordinator = hass.data[DOMAIN][entry.entry_id]
-    info_data = coordinator.data.get("info", {})
+    data = hass.data[DOMAIN][entry.entry_id]
+    coordinator: IVentCoordinator = data["coordinator"]
 
-    entities = []
-    all_devices = {}
+    added_entities: set[str] = set()
 
-    for group in info_data.get("groups", []):
-        if group.get("id") is None: continue
-        entities.append(IVentVentilationModeSelect(coordinator, group))
-        entities.append(IVentSpeedSelect(coordinator, group))
-        for device in group.get("devices", []):
-            if device.get("mac_address") and device["mac_address"] not in all_devices:
-                all_devices[device["mac_address"]] = (device, group["id"])
+    def _add_new_entities() -> None:
+        if coordinator.data is None:
+            return
+            
+        new_entities: list[SelectEntity] = []
 
-    for mac, (device_data, group_id) in all_devices.items():
-        entities.append(IVentMoveDeviceSelect(coordinator, device_data, group_id))
+        entry_id = coordinator.config_entry.entry_id
 
-    async_add_entities(entities)
+        for group in coordinator.data.groups_by_id.values():
+            uid_mode = f"{entry_id}_{group.id}_ventilation_mode"
+            if uid_mode not in added_entities:
+                added_entities.add(uid_mode)
+                new_entities.append(IVentVentilationModeSelect(coordinator, group))
 
+            uid_speed = f"{entry_id}_{group.id}_speed"
+            if uid_speed not in added_entities:
+                added_entities.add(uid_speed)
+                new_entities.append(IVentSpeedSelect(coordinator, group))
+
+        for device in coordinator.data.devices_by_mac.values():
+            uid_move = f"{device.mac_address}_move_to_group"
+            if uid_move not in added_entities:
+                added_entities.add(uid_move)
+                new_entities.append(IVentMoveDeviceSelect(coordinator, device))
+
+        if new_entities:
+            async_add_entities(new_entities)
+
+    _add_new_entities()
+    entry.async_on_unload(coordinator.async_add_listener(_add_new_entities))
+
+
+# ---------------------------------------------------------------------------
+# Group selects — both use IVentGroupEntity._group (O(1))
+# ---------------------------------------------------------------------------
 
 class IVentVentilationModeSelect(IVentGroupEntity, SelectEntity):
     """Predstavlja izbirnik načina prezračevanja (Rekuperacija/Bypass)."""
-    def __init__(self, coordinator, group_data: Dict[str, Any]):
+
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(self, coordinator: IVentCoordinator, group_data: IVentGroupData) -> None:
         super().__init__(coordinator, group_data)
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{self._group_id}_ventilation_mode"
-        self._attr_name = "Način prezračevanja"
+        self._attr_translation_key = "ventilation_mode"
         self._attr_options = list(HA_TO_API_MODE_MAP.keys())
         self._update_state()
 
-    def _update_state(self):
-        api_mode = self._remote_data.get("remote_control_work_mode")
-        self._attr_current_option = API_TO_HA_MODE_MAP.get(api_mode)
+    def _update_state(self) -> None:
+        group = self._group
+        actual = API_TO_HA_MODE_MAP.get(group.remote_control_work_mode) if group else None
+        self._attr_current_option = self._get_optimistic_attr("current_option", actual)
+
+    @property
+    def current_option(self) -> str | None:
+        group = self._group
+        actual = API_TO_HA_MODE_MAP.get(group.remote_control_work_mode) if group else None
+        return self._get_optimistic_attr("current_option", actual)  # type: ignore[no-any-return]
 
     async def async_select_option(self, option: str) -> None:
         api_mode = HA_TO_API_MODE_MAP.get(option)
-        if not api_mode: return
+        if not api_mode:
+            return
         payload = self._prepare_payload({"remote_control_work_mode": api_mode})
-        await self.coordinator.client.async_modify_group(self._group_id, payload)
-        await self.coordinator.async_request_refresh()
+        await self._async_handle_write("current_option", option, self.async_update_group(payload))
 
 
 class IVentSpeedSelect(IVentGroupEntity, SelectEntity):
     """Predstavlja izbirnik za hitrost ventilatorja."""
-    def __init__(self, coordinator, group_data: Dict[str, Any]):
+
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_icon = "mdi:fan-speed-2"
+
+    def __init__(self, coordinator: IVentCoordinator, group_data: IVentGroupData) -> None:
         super().__init__(coordinator, group_data)
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{self._group_id}_speed"
-        self._attr_name = "Hitrost"
-        self._attr_icon = "mdi:fan-speed-2"
+        self._attr_translation_key = "speed"
         self._attr_options = list(SPEED_MAP.keys())
         self._update_state()
 
-    def _update_state(self):
-        speed = self._remote_data.get("remote_control_speed")
-        self._attr_current_option = SPEED_MAP_REV.get(speed)
+    def _update_state(self) -> None:
+        group = self._group
+        actual = SPEED_MAP_REV.get(group.remote_control_speed) if group else None
+        self._attr_current_option = self._get_optimistic_attr("current_option", actual)
+
+    @property
+    def current_option(self) -> str | None:
+        group = self._group
+        actual = SPEED_MAP_REV.get(group.remote_control_speed) if group else None
+        return self._get_optimistic_attr("current_option", actual)  # type: ignore[no-any-return]
 
     async def async_select_option(self, option: str) -> None:
         speed = SPEED_MAP.get(option)
-        if speed is None: return
+        if speed is None:
+            return
         payload = self._prepare_payload({"remote_control_speed": speed})
-        await self.coordinator.client.async_modify_group(self._group_id, payload)
-        await self.coordinator.async_request_refresh()
+        await self._async_handle_write("current_option", option, self.async_update_group(payload))
 
 
-class IVentMoveDeviceSelect(CoordinatorEntity, SelectEntity):
-    """Predstavlja izbirnik za premik enote v drugo skupino."""
-    _attr_has_entity_name = True
+# ---------------------------------------------------------------------------
+# Device select — uses IVentDeviceEntity base (stable MAC-based identity)
+# ---------------------------------------------------------------------------
 
-    def __init__(self, coordinator, device_data: Dict[str, Any], current_group_id: int):
-        super().__init__(coordinator)
-        self._device_mac = device_data["mac_address"]
-        self._current_group_id = current_group_id
-        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, self._device_mac)})
+class IVentMoveDeviceSelect(IVentDeviceEntity, SelectEntity):
+    """Predstavlja izbirnik za premik enote v drugo skupino.
+
+    unique_id: {mac_address}_move_to_group  (stable — MAC never changes)
+    """
+
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_icon = "mdi:arrow-right-bold-box-outline"
+
+    def __init__(
+        self,
+        coordinator: IVentCoordinator,
+        device_data: IVentDeviceData,
+    ) -> None:
+        super().__init__(coordinator, device_data)
         self._attr_unique_id = f"{self._device_mac}_move_to_group"
-        self._attr_name = "Premakni v skupino"
-        self._attr_icon = "mdi:arrow-right-bold-box-outline"
+        self._attr_translation_key = "move_device"
         self._update_options()
 
-    def _update_options(self):
-        info_data = self.coordinator.data.get("info", {})
-        self._groups_map = {g["name"]: g["id"] for g in info_data.get("groups", []) if g.get("name")}
+    def _update_options(self) -> None:
+        """Refresh group options from coordinator (no nested loops)."""
+        if self.coordinator.data is None:
+            self._groups_map: dict[str, int] = {}
+            self._attr_options = []
+            return
+        self._groups_map = {
+            g.name: gid
+            for gid, g in self.coordinator.data.groups_by_id.items()
+            if g.name
+        }
         self._attr_options = list(self._groups_map.keys())
-        for name, group_id in self._groups_map.items():
-            if group_id == self._current_group_id:
-                self._attr_current_option = name
-                break
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        info_data = self.coordinator.data.get("info", {})
-        found = False
-        for group in info_data.get("groups", []):
-            for device in group.get("devices", []):
-                if device.get("mac_address") == self._device_mac:
-                    self._current_group_id = group["id"]
-                    found = True
-                    break
-            if found: break
+        device = self._device
+        if device:
+            current_group = self.coordinator.data.groups_by_id.get(device.group_id)
+            self._attr_current_option = current_group.name if current_group else None
+
+    def _update_state(self) -> None:
         self._update_options()
-        self.async_write_ha_state()
+
+    def _refresh_device_info(self) -> None:
+        """Refresh group options from coordinator."""
+        self._update_state()
+
     async def async_select_option(self, option: str) -> None:
         target_group_id = self._groups_map.get(option)
-        if not target_group_id: return
-        await self.coordinator.client.async_modify_device(self._device_mac, {"group_id": target_group_id})
-        await self.coordinator.async_request_refresh()
+        if not target_group_id:
+            return
+        await self._async_handle_write("current_option", option, self.async_update_device({"group_id": target_group_id}))
+

@@ -1,22 +1,124 @@
 {
-    "config": {
-      "step": {
-        "user": {
-          "title": "i-Vent Smart Home Nastavitve",
-          "description": "Vnesite API ključ in ID lokacije, ki ju dobite v i-Vent spletnem vmesniku ({api_url}).",
-          "data": {
-            "api_key": "API Ključ",
-            "location_id": "ID Lokacije"
-          }
+  "config": {
+    "step": {
+      "user": {
+        "title": "i-Vent Smart Home Nastavitve",
+        "description": "Vnesite API ključ, ki ga dobite v i-Vent spletnem vmesniku ({api_url}). Iskanje lokacij se bo začelo samodejno.",
+        "data": {
+          "api_key": "API Ključ"
         }
       },
-      "error": {
-        "auth_error": "Napaka pri avtentikaciji. Preverite API ključ in ID lokacije.",
-        "cannot_connect": "Povezava z i-Vent strežnikom ni uspela. Preverite internetno povezavo."
+      "location": {
+        "title": "Izbira lokacije",
+        "description": "Najdenih je bilo več lokacij. Prosimo, izberite, katero želite nastaviti.",
+        "data": {
+          "location_id": "Lokacija"
+        }
       },
-      "abort": {
-        "already_configured": "Ta lokacija je že nastavljena."
+      "reauth_confirm": {
+        "title": "i-Vent Ponovna avtentikacija",
+        "description": "Ponovno vnesite API ključ, da osvežite povezavo.",
+        "data": {
+          "api_key": "API Ključ"
+        }
+      },
+      "reconfigure": {
+        "title": "i-Vent Rekonfiguracija",
+        "description": "Posodobite podatke o povezavi za to lokacijo.",
+        "data": {
+          "api_key": "API Ključ",
+          "location_id": "ID Lokacije"
+        }
+      }
+    },
+    "error": {
+      "auth_error": "Napaka pri avtentikaciji. Preverite API ključ.",
+      "cannot_connect": "Povezava z i-Vent strežnikom ni uspela. Preverite internetno povezavo.",
+      "no_locations": "Za ta API ključ ni bila najdena nobena lokacija."
+    },
+    "abort": {
+      "already_configured": "Ta lokacija je že nastavljena.",
+      "reauth_successful": "Ponovna avtentikacija je bila uspešna.",
+      "reconfigure_successful": "Rekonfiguracija je bila uspešna."
+    }
+  },
+  "entity": {
+    "fan": {
+      "fan_main": {
+        "name": "Prezračevalna skupina"
+      }
+    },
+    "sensor": {
+      "rssi": {
+        "name": "Moč Wi-Fi signala"
+      },
+      "work_mode_changed_at": {
+        "name": "Zadnja sprememba načina"
+      },
+      "special_mode_ends_at": {
+        "name": "Konec posebnega načina"
+      }
+    },
+    "binary_sensor": {
+      "problem": {
+        "name": "Napaka na napravi"
+      },
+      "alive": {
+        "name": "Povezljivost"
+      },
+      "filter": {
+        "name": "Filter potrebuje čiščenje"
+      }
+    },
+    "switch": {
+      "led": {
+        "name": "LED indikatorji"
+      },
+      "buzzer": {
+        "name": "Zvočni signali"
+      },
+      "night1": {
+        "name": "Nočni način 1"
+      },
+      "night2": {
+        "name": "Nočni način 2"
+      },
+      "snooze": {
+        "name": "Dremež (začasni izklop)"
+      },
+      "boost": {
+        "name": "Intenzivno prezračevanje (Boost)"
+      },
+      "schedule": {
+        "name": "Urnik"
+      },
+      "reverse_flow": {
+        "name": "Obratni tok"
+      }
+    },
+    "text": {
+      "group_name": {
+        "name": "Ime skupine"
+      },
+      "device_name": {
+        "name": "Ime enote"
+      }
+    },
+    "button": {
+      "delete_group": {
+        "name": "Izbriši skupino"
+      }
+    },
+    "select": {
+      "ventilation_mode": {
+        "name": "Način delovanja"
+      },
+      "speed": {
+        "name": "Stopnja hitrosti"
+      },
+      "move_device": {
+        "name": "Premakni enoto v skupino"
       }
     }
   }
-  
+}
