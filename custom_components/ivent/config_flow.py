@@ -26,35 +26,55 @@ class IVentConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
 
         if user_input is not None:
             self._api_key = user_input[CONF_API_KEY]
+            location_id_input = user_input.get(CONF_LOCATION_ID)
             
-            try:
-                session = async_get_clientsession(self.hass)
-                client = IVentApiClient(session, self._api_key)
-                self._locations = await client.async_get_locations()
-                
-                if not self._locations:
-                    errors["base"] = "no_locations"
-                else:
-                    if len(self._locations) == 1:
-                        location = self._locations[0]
-                        return await self._create_entry_for_location(
-                            location["id"], location.get("name", "Default")
-                        )
-                    return await self.async_step_location()
+            if location_id_input:
+                try:
+                    session = async_get_clientsession(self.hass)
+                    client = IVentApiClient(session, self._api_key, location_id_input)
+                    # Validate the location by fetching info
+                    await client.async_get_info()
+                    return await self._create_entry_for_location(
+                        location_id_input, location_id_input
+                    )
+                except IVentApiAuthError:
+                    errors["base"] = "auth_error"
+                except IVentApiClientError:
+                    errors["base"] = "cannot_connect"
+                except AbortFlow:
+                    raise
+                except Exception:
+                    errors["base"] = "cannot_connect"
+            else:
+                try:
+                    session = async_get_clientsession(self.hass)
+                    client = IVentApiClient(session, self._api_key)
+                    self._locations = await client.async_get_locations()
+                    
+                    if not self._locations:
+                        errors["base"] = "no_locations"
+                    else:
+                        if len(self._locations) == 1:
+                            location = self._locations[0]
+                            return await self._create_entry_for_location(
+                                location["id"], location.get("name", "Default")
+                            )
+                        return await self.async_step_location()
 
-            except IVentApiAuthError:
-                errors["base"] = "auth_error"
-            except IVentApiClientError:
-                errors["base"] = "cannot_connect"
-            except AbortFlow:
-                raise
-            except Exception:
-                errors["base"] = "cannot_connect"
+                except IVentApiAuthError:
+                    errors["base"] = "auth_error"
+                except IVentApiClientError:
+                    errors["base"] = "cannot_connect"
+                except AbortFlow:
+                    raise
+                except Exception:
+                    errors["base"] = "cannot_connect"
 
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema({
                 vol.Required(CONF_API_KEY): str,
+                vol.Optional(CONF_LOCATION_ID): str,
             }),
             errors=errors,
             description_placeholders={"api_url": "https://cloud.i-vent.com/"}

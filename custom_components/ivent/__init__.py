@@ -76,16 +76,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         }
 
         dev_reg = dr.async_get(hass)
+        ent_reg = er.async_get(hass)
+
         for device_entry in dr.async_entries_for_config_entry(dev_reg, entry.entry_id):
             if not (device_entry.identifiers & active_device_identifiers):
                 _LOGGER.info(
                     "Removing stale device from registry: %s", device_entry.name
                 )
-                # Cascades: HA automatically removes all entity registry
-                # entries whose device_id matches this device.
+                # HA device removal only unlinks entities (sets device_id=None).
+                # We must explicitly remove the entities to prevent unavailable ghosts.
+                for entity_entry in er.async_entries_for_device(ent_reg, device_entry.id):
+                    _LOGGER.info(
+                        "Removing stale entity from registry: %s", entity_entry.entity_id
+                    )
+                    ent_reg.async_remove(entity_entry.entity_id)
+
                 dev_reg.async_remove_device(device_entry.id)
 
-        # ── 2. Stale schedule entities (attached to the system device) ─────
+        # ── 2. Stale schedule entities and orphaned ghost entities ─────────
         # Schedule switches are attached to the top-level "i-Vent System"
         # device, so removing that device is not an option.  We must detect
         # and remove orphaned schedule entities ourselves.
@@ -94,9 +102,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             for sid in data.schedules_by_id
         }
 
-        ent_reg = er.async_get(hass)
         for entity_entry in er.async_entries_for_config_entry(ent_reg, entry.entry_id):
             uid = entity_entry.unique_id
+
+            # Orphaned entities (device_id is None) are ghost entities left behind
+            # if a device was removed previously without explicitly removing its entities.
+            if entity_entry.device_id is None:
+                _LOGGER.info(
+                    "Removing orphaned ghost entity from registry: %s", entity_entry.entity_id
+                )
+                ent_reg.async_remove(entity_entry.entity_id)
+                continue
+
             # Only touch schedule entities belonging to this entry
             if (
                 uid is not None
