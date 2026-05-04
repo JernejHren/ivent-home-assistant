@@ -5,7 +5,8 @@
         "title": "i-Vent Smart Home Settings",
         "description": "Enter the API key from the i-Vent web interface ({api_url}). Location discovery will start automatically.",
         "data": {
-          "api_key": "API Key"
+          "api_key": "API Key",
+          "location_id": "Location ID (Optional)"
         }
       },
       "location": {

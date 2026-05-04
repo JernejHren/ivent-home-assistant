@@ -5,7 +5,8 @@
         "title": "i-Vent Smart Home Nastavitve",
         "description": "Vnesite API ključ, ki ga dobite v i-Vent spletnem vmesniku ({api_url}). Iskanje lokacij se bo začelo samodejno.",
         "data": {
-          "api_key": "API Ključ"
+          "api_key": "API Ključ",
+          "location_id": "ID Lokacije (Opcijsko)"
         }
       },
       "location": {
