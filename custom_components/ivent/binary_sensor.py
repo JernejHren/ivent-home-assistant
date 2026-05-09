@@ -5,7 +5,6 @@ from typing import Any, Dict
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass, BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -14,6 +13,7 @@ from .coordinator import IVentCoordinator, IVentDeviceData
 from .entity import IVentDeviceEntity
 
 PARALLEL_UPDATES = 1
+CONNECTIVITY_STATUS_MASK = 16
 
 # Preslikava bitnih mask status_code v posamezne senzorje
 # Ključ: bitna maska
@@ -28,6 +28,16 @@ STATUS_FLAGS: Dict[int, Dict[str, Any]] = {
 }
 
 
+def _active_status_flags(device: IVentDeviceData) -> int:
+    """Return status flags that should currently count as active problems."""
+    flags = (
+        device.diagnostic_flags
+        if device.diagnostic_flags is not None
+        else device.status_esp
+    )
+    return flags & ~CONNECTIVITY_STATUS_MASK
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -37,35 +47,34 @@ async def async_setup_entry(
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator: IVentCoordinator = data["coordinator"]
 
+    added_entities: set[str] = set()
+
     def _add_new_entities() -> None:
         if coordinator.data is None:
             return
-
-        entity_registry = er.async_get(hass)
-        existing_entries = er.async_entries_for_config_entry(
-            entity_registry, entry.entry_id
-        )
-        existing_unique_ids = {ent.unique_id for ent in existing_entries}
 
         new_entities: list[BinarySensorEntity] = []
 
         for device in coordinator.data.devices_by_mac.values():
             # 1. Osnovni senzor težav (povzetek vseh napak)
-            uid_prob = f"{entry.entry_id}_{device.mac_address}_problem"
-            if uid_prob not in existing_unique_ids:
+            uid_prob = f"{device.mac_address}_problem"
+            if uid_prob not in added_entities:
+                added_entities.add(uid_prob)
                 new_entities.append(IVentProblemSensor(coordinator, device))
 
             # 2. Specifični diagnostični senzorji iz bitne maske
             for mask, config in STATUS_FLAGS.items():
-                uid_diag = f"{entry.entry_id}_{device.mac_address}_{config['key']}"
-                if uid_diag not in existing_unique_ids:
+                uid_diag = f"{device.mac_address}_{config['key']}"
+                if uid_diag not in added_entities:
+                    added_entities.add(uid_diag)
                     new_entities.append(
                         IVentDiagnosticSensor(coordinator, device, mask, config)
                     )
 
             # 3. Senzor povezljivosti
-            uid_alive = f"{entry.entry_id}_{device.mac_address}_alive"
-            if uid_alive not in existing_unique_ids:
+            uid_alive = f"{device.mac_address}_alive"
+            if uid_alive not in added_entities:
+                added_entities.add(uid_alive)
                 new_entities.append(IVentAliveSensor(coordinator, device))
 
         if new_entities:
@@ -83,14 +92,14 @@ class IVentProblemSensor(IVentDeviceEntity, BinarySensorEntity):
 
     def __init__(self, coordinator: IVentCoordinator, device_data: IVentDeviceData) -> None:
         super().__init__(coordinator, device_data)
-        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{self._device_mac}_problem"
+        self._attr_unique_id = f"{self._device_mac}_problem"
         self._attr_translation_key = "problem"
 
     @property
     def is_on(self) -> bool:
         device = self._device
-        # status_esp != 0 pomeni, da je vsaj ena napaka/opozorilo aktivno
-        return device is not None and device.status_esp != 0
+        # Non-zero active flags mean at least one error/warning is active.
+        return device is not None and _active_status_flags(device) != 0
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -110,7 +119,7 @@ class IVentDiagnosticSensor(IVentDeviceEntity, BinarySensorEntity):
     ) -> None:
         super().__init__(coordinator, device_data)
         self._mask = mask
-        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{self._device_mac}_{config['key']}"
+        self._attr_unique_id = f"{self._device_mac}_{config['key']}"
         self._attr_translation_key = config["key"]
         self._attr_device_class = config["device_class"]
         self._attr_entity_category = config["category"]
@@ -120,11 +129,7 @@ class IVentDiagnosticSensor(IVentDeviceEntity, BinarySensorEntity):
         device = self._device
         if device is None:
             return False
-        flags = (
-            device.diagnostic_flags
-            if device.diagnostic_flags is not None
-            else device.status_esp
-        )
+        flags = _active_status_flags(device)
         return bool(flags & self._mask)
 
 
@@ -136,11 +141,10 @@ class IVentAliveSensor(IVentDeviceEntity, BinarySensorEntity):
 
     def __init__(self, coordinator: IVentCoordinator, device_data: IVentDeviceData) -> None:
         super().__init__(coordinator, device_data)
-        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{self._device_mac}_alive"
+        self._attr_unique_id = f"{self._device_mac}_alive"
         self._attr_translation_key = "alive"
 
     @property
     def is_on(self) -> bool:
         device = self._device
         return device is not None and device.alive
-

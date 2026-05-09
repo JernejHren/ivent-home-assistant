@@ -4,7 +4,7 @@ import logging
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, ServiceCall, callback
+from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import (
     device_registry as dr,
@@ -49,83 +49,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry_type=dr.DeviceEntryType.SERVICE,
         configuration_url="https://cloud.i-vent.com/",
     )
-
-    @callback
-    def _async_remove_stale_entries() -> None:
-        """Odstrani zastarele naprave in entitete iz registrov HA.
-
-        Poklicano ob vsaki uspešni posodobitvi koordinatorja.
-
-        Strategija:
-        - Naprave, ki jih API ne vrne več → async_remove_device.
-          HA samodejno kaskadno odstrani vse entitete za tisto napravo.
-        - Urniki (schedule), ki jih API ne vrne več → odstranimo entiteto
-          neposredno iz entity_registry (ker so pritrjene na sistemsko napravo,
-          ki nikoli ni odstranjena).
-        """
-        if not coordinator.last_update_success or coordinator.data is None:
-            return
-
-        data = coordinator.data
-
-        # ── 1. Stale devices ───────────────────────────────────────────────
-        active_device_identifiers = {
-            (DOMAIN, entry.entry_id),
-            *((DOMAIN, f"{entry.entry_id}_{gid}") for gid in data.group_ids),
-            *((DOMAIN, mac) for mac in data.all_device_macs),
-        }
-
-        dev_reg = dr.async_get(hass)
-        ent_reg = er.async_get(hass)
-
-        for device_entry in dr.async_entries_for_config_entry(dev_reg, entry.entry_id):
-            if not (device_entry.identifiers & active_device_identifiers):
-                _LOGGER.info(
-                    "Removing stale device from registry: %s", device_entry.name
-                )
-                # HA device removal only unlinks entities (sets device_id=None).
-                # We must explicitly remove the entities to prevent unavailable ghosts.
-                for entity_entry in er.async_entries_for_device(ent_reg, device_entry.id):
-                    _LOGGER.info(
-                        "Removing stale entity from registry: %s", entity_entry.entity_id
-                    )
-                    ent_reg.async_remove(entity_entry.entity_id)
-
-                dev_reg.async_remove_device(device_entry.id)
-
-        # ── 2. Stale schedule entities and orphaned ghost entities ─────────
-        # Schedule switches are attached to the top-level "i-Vent System"
-        # device, so removing that device is not an option.  We must detect
-        # and remove orphaned schedule entities ourselves.
-        active_schedule_unique_ids = {
-            f"{entry.entry_id}_schedule_{sid}"
-            for sid in data.schedules_by_id
-        }
-
-        for entity_entry in er.async_entries_for_config_entry(ent_reg, entry.entry_id):
-            uid = entity_entry.unique_id
-
-            # Orphaned entities (device_id is None) are ghost entities left behind
-            # if a device was removed previously without explicitly removing its entities.
-            if entity_entry.device_id is None:
-                _LOGGER.info(
-                    "Removing orphaned ghost entity from registry: %s", entity_entry.entity_id
-                )
-                ent_reg.async_remove(entity_entry.entity_id)
-                continue
-
-            # Only touch schedule entities belonging to this entry
-            if (
-                uid is not None
-                and uid.startswith(f"{entry.entry_id}_schedule_")
-                and uid not in active_schedule_unique_ids
-            ):
-                _LOGGER.info(
-                    "Removing stale schedule entity from registry: %s", uid
-                )
-                ent_reg.async_remove(entity_entry.entity_id)
-
-    entry.async_on_unload(coordinator.async_add_listener(_async_remove_stale_entries))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -232,8 +155,7 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
     """Migrate old entry."""
     _LOGGER.debug("Migrating from version %s", config_entry.version)
 
-    if config_entry.version == 1:
-        new_version = 2
+    if config_entry.version < 3:
         entry_id = config_entry.entry_id
         ent_reg = er.async_get(hass)
 
@@ -242,22 +164,31 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
             if not old_uid:
                 continue
 
-            # Migrate {mac}_problem and {mac}_alive to {entry_id}_{mac}_...
-            if old_uid.endswith("_problem") or old_uid.endswith("_alive"):
-                # If it doesn't already start with entry_id, migrate it
-                if not old_uid.startswith(f"{entry_id}_"):
-                    new_uid = f"{entry_id}_{old_uid}"
-                    _LOGGER.info(
-                        "Migrating entity %s unique_id from %s to %s",
-                        entity_entry.entity_id,
-                        old_uid,
-                        new_uid,
-                    )
-                    ent_reg.async_update_entity(
-                        entity_entry.entity_id, new_unique_id=new_uid
-                    )
+            new_uid = old_uid
 
-        hass.config_entries.async_update_entry(config_entry, version=new_version)
+            # Binary sensor device entities should use the same MAC-based
+            # unique_id strategy as other device entities.
+            if old_uid.startswith(f"{entry_id}_"):
+                stripped_uid = old_uid[len(f"{entry_id}_"):]
+                if (
+                    stripped_uid.endswith("_problem")
+                    or stripped_uid.endswith("_alive")
+                    or stripped_uid.endswith("_filter")
+                ):
+                    new_uid = stripped_uid
+
+            if new_uid != old_uid:
+                _LOGGER.info(
+                    "Migrating entity %s unique_id from %s to %s",
+                    entity_entry.entity_id,
+                    old_uid,
+                    new_uid,
+                )
+                ent_reg.async_update_entity(
+                    entity_entry.entity_id, new_unique_id=new_uid
+                )
+
+        hass.config_entries.async_update_entry(config_entry, version=3)
 
     _LOGGER.info("Migration to version %s successful", config_entry.version)
 

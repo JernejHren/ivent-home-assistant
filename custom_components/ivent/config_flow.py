@@ -13,7 +13,7 @@ from .api import IVentApiClient, IVentApiClientError, IVentApiAuthError, IVentLo
 class IVentConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg]
     """Obravnava konfiguracijski tok za i-Vent."""
 
-    VERSION = 2
+    VERSION = 3
 
     def __init__(self) -> None:
         """Inicializira tok."""
