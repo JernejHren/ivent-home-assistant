@@ -7,7 +7,26 @@ from homeassistant.helpers import device_registry as dr, entity_registry as er
 
 from custom_components.ivent.api import IVentApiAuthError
 from custom_components.ivent.const import DOMAIN
+from custom_components.ivent.coordinator import IVentDeviceData
 from .conftest import MOCK_INFO_DATA
+
+
+def test_device_firmware_version_is_normalized_to_string():
+    """Test that numeric firmware versions are safe for HA DeviceInfo sw_version."""
+    device = IVentDeviceData(
+        raw={
+            "mac_address": "AA:BB:CC:DD:EE:FF",
+            "device_name": "Enota 1",
+            "rssi": -65,
+            "firmware_version": 123,
+            "alive": True,
+            "status_esp": 0,
+            "reverse_flow": False,
+        }
+    )
+
+    assert device.firmware_version == "123"
+
 
 async def test_coordinator_auth_error_on_schedules(
     hass: HomeAssistant, mock_config_entry, mock_api_client

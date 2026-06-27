@@ -27,7 +27,7 @@ class IVentDevice(TypedDict):
     mac_address: str
     device_name: str
     rssi: int
-    firmware_version: str
+    firmware_version: str | int | None
     alive: bool
     status_esp: int
     diagnostic_flags: NotRequired[int | None]

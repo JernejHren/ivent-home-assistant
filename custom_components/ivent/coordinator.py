@@ -127,7 +127,10 @@ class IVentDeviceData:
 
     @property
     def firmware_version(self) -> str:
-        return self.raw.get("firmware_version", "")
+        firmware_version = self.raw.get("firmware_version", "")
+        if firmware_version is None:
+            return ""
+        return str(firmware_version)
 
     @property
     def alive(self) -> bool:
