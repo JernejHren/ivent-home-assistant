@@ -240,6 +240,41 @@ class IVentGroupEntity(IVentBaseEntity):
         )
         return _WORK_MODE_BY_REMOTE_SETTINGS[(mode, speed)]
 
+    def _build_remote_settings_payload(
+        self,
+        remote_control_work_mode: str,
+        remote_control_speed: int,
+        *,
+        keep_off: bool = False,
+    ) -> Dict[str, Any]:
+        """Build a synchronized remote_work_mode payload.
+
+        The i-Vent API requires work_mode, remote_control_work_mode, and
+        remote_control_speed to stay in sync when changing recuperation/bypass
+        or speed. special_mode and bypass_rotation are preserved via
+        _prepare_payload defaults.
+
+        Args:
+            remote_control_work_mode: Target ventilation mode (Normal/Bypass).
+            remote_control_speed: Target fan speed (1-3).
+            keep_off: When True and the group is currently off, keep
+                work_mode at IVentWorkOff instead of calculating a running mode.
+        """
+        vent_mode = self._normalize_remote_control_work_mode(remote_control_work_mode)
+        speed = self._normalize_remote_control_speed(remote_control_speed)
+
+        group = self._group
+        if keep_off and group is not None and group.work_mode == API_MODE_WORK_OFF:
+            new_work_mode = API_MODE_WORK_OFF
+        else:
+            new_work_mode = self._work_mode_for_remote_settings(vent_mode, speed)
+
+        return self._prepare_payload({
+            "work_mode": new_work_mode,
+            "remote_control_speed": speed,
+            "remote_control_work_mode": vent_mode,
+        })
+
     async def async_update_group(self, payload: Dict[str, Any]) -> None:
         """Spremeni podatke skupine preko API in osveži koordinatorja."""
         await self.coordinator.client.async_modify_group(self._group_id, payload)
