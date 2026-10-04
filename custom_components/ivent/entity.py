@@ -25,7 +25,9 @@ DeviceInfo strategy
 """
 from __future__ import annotations
 
+import asyncio
 import copy
+import logging
 from time import monotonic
 from typing import Any, Dict
 
@@ -33,9 +35,15 @@ from homeassistant.core import callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.device_registry import DeviceInfo
 
-from .const import DOMAIN, API_MODE_WORK_OFF
+from .const import ALL_GROUPS_ID, DOMAIN, API_MODE_WORK_OFF
 from .coordinator import IVentCoordinator, IVentGroupData, IVentDeviceData
 from .api import IVentScheduleItem
+
+_LOGGER = logging.getLogger(__name__)
+
+# Polja ModifyGroup, ki jih ima smisel razširiti iz skupine "vse naprave"
+# na prave skupine. Preimenovanje in brisanje se nikoli ne razširita.
+_FAN_OUT_KEYS = frozenset({"led_mode", "buzzer_mode", "remote_work_mode"})
 
 _WORK_MODE_BY_REMOTE_SETTINGS = {
     ("Normal", 1): "IVentRecuperation1",
@@ -45,6 +53,20 @@ _WORK_MODE_BY_REMOTE_SETTINGS = {
     ("Bypass", 2): "IVentBypass2",
     ("Bypass", 3): "IVentBypass3",
 }
+
+
+class _GroupPayload(dict):  # type: ignore[type-arg]
+    """Payload za modify_group, ki si zapomni, kaj je bilo dejansko spremenjeno.
+
+    Za skupino "vse naprave" mora vsaka ciljna skupina dobiti SVOJE stanje
+    z uporabljenimi spremembami, ne stanja skupine 1.
+    """
+
+    changes: Dict[str, Any]
+
+    def __init__(self, data: Dict[str, Any], changes: Dict[str, Any]) -> None:
+        super().__init__(data)
+        self.changes = dict(changes)
 
 
 class IVentBaseEntity(CoordinatorEntity[IVentCoordinator]):
@@ -187,7 +209,14 @@ class IVentGroupEntity(IVentBaseEntity):
             from homeassistant.exceptions import HomeAssistantError
             raise HomeAssistantError("Cannot prepare payload: group data is missing.")
 
-        remote: Dict[str, Any] = group.remote  # type: ignore[assignment]
+        return _GroupPayload(
+            {"remote_work_mode": self._merge_remote(group.remote, changes)},  # type: ignore[arg-type]
+            changes,
+        )
+
+    @staticmethod
+    def _merge_remote(remote: Dict[str, Any], changes: Dict[str, Any]) -> Dict[str, Any]:
+        """Združi trenutno stanje remote z zahtevanimi spremembami."""
         base = {
             "work_mode": remote.get("work_mode", "IVentRecuperation1"),
             "special_mode": remote.get("special_mode", "IVentSpecialOff"),
@@ -197,9 +226,11 @@ class IVentGroupEntity(IVentBaseEntity):
         }
         base.update(changes)
 
-        speed = self._normalize_remote_control_speed(base.get("remote_control_speed", 1))
+        speed = IVentGroupEntity._normalize_remote_control_speed(
+            base.get("remote_control_speed", 1)
+        )
         base["remote_control_speed"] = speed
-        remote_control_work_mode = self._normalize_remote_control_work_mode(
+        remote_control_work_mode = IVentGroupEntity._normalize_remote_control_work_mode(
             base.get("remote_control_work_mode")
         )
         base["remote_control_work_mode"] = remote_control_work_mode
@@ -208,14 +239,11 @@ class IVentGroupEntity(IVentBaseEntity):
             "remote_control_speed" in changes
             or "remote_control_work_mode" in changes
         )
-        should_update_work_mode = (
-            remote_settings_changed and base.get("work_mode") != API_MODE_WORK_OFF
-        )
-        if should_update_work_mode:
-            base["work_mode"] = self._work_mode_for_remote_settings(
+        if remote_settings_changed and base.get("work_mode") != API_MODE_WORK_OFF:
+            base["work_mode"] = IVentGroupEntity._work_mode_for_remote_settings(
                 remote_control_work_mode, speed
             )
-        return {"remote_work_mode": base}
+        return base
 
     @staticmethod
     def _normalize_remote_control_speed(value: Any) -> int:
@@ -242,8 +270,8 @@ class IVentGroupEntity(IVentBaseEntity):
 
     def _build_remote_settings_payload(
         self,
-        remote_control_work_mode: str,
-        remote_control_speed: int,
+        remote_control_work_mode: str | None,
+        remote_control_speed: int | None,
         *,
         keep_off: bool = False,
     ) -> Dict[str, Any]:
@@ -255,43 +283,131 @@ class IVentGroupEntity(IVentBaseEntity):
         _prepare_payload defaults.
 
         Args:
-            remote_control_work_mode: Target ventilation mode (Normal/Bypass).
-            remote_control_speed: Target fan speed (1-3).
-            keep_off: When True and the group is currently off, keep
-                work_mode at IVentWorkOff instead of calculating a running mode.
+            remote_control_work_mode: Target ventilation mode (Normal/Bypass),
+                or None to leave it unchanged (only with keep_off=True).
+            remote_control_speed: Target fan speed (1-3), or None to leave it
+                unchanged (only with keep_off=True).
+            keep_off: When True, work_mode is derived from the merged state of
+                each group and an OFF group stays OFF. Fields passed as None
+                are not touched, which matters when the command is fanned out
+                from the "all devices" group to groups in different states.
         """
-        vent_mode = self._normalize_remote_control_work_mode(remote_control_work_mode)
-        speed = self._normalize_remote_control_speed(remote_control_speed)
-
-        group = self._group
-        if keep_off and group is not None and group.work_mode == API_MODE_WORK_OFF:
-            new_work_mode = API_MODE_WORK_OFF
-        else:
-            new_work_mode = self._work_mode_for_remote_settings(vent_mode, speed)
-
-        return self._prepare_payload({
-            "work_mode": new_work_mode,
-            "remote_control_speed": speed,
-            "remote_control_work_mode": vent_mode,
-        })
+        changes: Dict[str, Any] = {}
+        if remote_control_work_mode is not None:
+            changes["remote_control_work_mode"] = (
+                self._normalize_remote_control_work_mode(remote_control_work_mode)
+            )
+        if remote_control_speed is not None:
+            changes["remote_control_speed"] = self._normalize_remote_control_speed(
+                remote_control_speed
+            )
+        if not keep_off:
+            group = self._group
+            vent_mode = changes.get(
+                "remote_control_work_mode",
+                group.remote_control_work_mode if group else "Normal",
+            )
+            speed = changes.get(
+                "remote_control_speed",
+                group.remote_control_speed if group else 1,
+            )
+            changes["work_mode"] = self._work_mode_for_remote_settings(
+                self._normalize_remote_control_work_mode(vent_mode),
+                self._normalize_remote_control_speed(speed),
+            )
+        return self._prepare_payload(changes)
 
     async def async_update_group(self, payload: Dict[str, Any]) -> None:
-        """Spremeni podatke skupine preko API in osveži koordinatorja."""
-        await self.coordinator.client.async_modify_group(self._group_id, payload)
-        self._apply_successful_group_write(payload)
+        """Spremeni podatke skupine preko API in osveži koordinatorja.
+
+        Za rezervirano skupino "vse naprave" (id 1) oblak ukaza ne razširi
+        na ostale skupine, zato ga tu ponovimo na vsaki skupini z napravami.
+        """
+        targets = self._fan_out_targets(payload)
+        if targets is None:
+            await self.coordinator.client.async_modify_group(self._group_id, payload)
+            self._apply_successful_group_write(payload)
+        else:
+            await self._async_fan_out_group_write(payload, targets)
         await self.coordinator.async_request_delayed_refresh()
 
+    def _fan_out_targets(self, payload: Dict[str, Any]) -> list[int] | None:
+        """Vrne ID-je skupin za razširitev ali None, če razširitev ni potrebna."""
+        if self._group_id != ALL_GROUPS_ID or self.coordinator.data is None:
+            return None
+        if not payload or not set(payload) <= _FAN_OUT_KEYS:
+            return None
+        targets = [
+            gid
+            for gid, group in self.coordinator.data.groups_by_id.items()
+            if gid != ALL_GROUPS_ID and group.device_macs
+        ]
+        return targets or None
+
+    async def _async_fan_out_group_write(
+        self, payload: Dict[str, Any], targets: list[int]
+    ) -> None:
+        """Pošlje isti ukaz vsaki ciljni skupini (vsaka z lastnim remote stanjem).
+
+        Skupina "vse naprave" sama je zapis best-effort: uradna aplikacija
+        nanjo ne piše, vendar tako ostane prikaz njenih entitet usklajen.
+        """
+        data = self.coordinator.data
+        assert data is not None
+        changes = getattr(payload, "changes", None)
+
+        writes: list[tuple[int, Dict[str, Any]]] = []
+        for gid in [*targets, ALL_GROUPS_ID]:
+            group = data.groups_by_id.get(gid)
+            if (
+                changes is not None
+                and "remote_work_mode" in payload
+                and group is not None
+            ):
+                target_payload = dict(payload)
+                target_payload["remote_work_mode"] = self._merge_remote(
+                    group.remote, changes  # type: ignore[arg-type]
+                )
+            else:
+                target_payload = dict(payload)
+            writes.append((gid, target_payload))
+
+        results = await asyncio.gather(
+            *(
+                self.coordinator.client.async_modify_group(gid, body)
+                for gid, body in writes
+            ),
+            return_exceptions=True,
+        )
+
+        errors: list[Exception] = []
+        for (gid, body), result in zip(writes, results):
+            if isinstance(result, Exception):
+                _LOGGER.warning("Fan-out write to group %s failed: %s", gid, result)
+                if gid != ALL_GROUPS_ID:
+                    errors.append(result)
+                continue
+            self._apply_group_write(gid, body)
+        self.coordinator.async_set_updated_data(data)
+
+        if errors:
+            raise errors[0]
+
     def _apply_successful_group_write(self, payload: Dict[str, Any]) -> None:
+        if self._apply_group_write(self._group_id, payload) and self.coordinator.data:
+            self.coordinator.async_set_updated_data(self.coordinator.data)
+
+    def _apply_group_write(self, group_id: int, payload: Dict[str, Any]) -> bool:
+        """Optimistično vnese uspešen zapis v podatke koordinatorja."""
         remote_payload = payload.get("remote_work_mode")
-        if not isinstance(remote_payload, dict):
-            return
-
-        group = self._group
-        if group is None or self.coordinator.data is None:
-            return
-
-        group.raw["remote"].update(copy.deepcopy(remote_payload))
-        self.coordinator.async_set_updated_data(self.coordinator.data)
+        if not isinstance(remote_payload, dict) or self.coordinator.data is None:
+            return False
+        group = self.coordinator.data.groups_by_id.get(group_id)
+        if group is None:
+            return False
+        remote: Dict[str, Any] = group.raw.setdefault("remote", {})  # type: ignore[assignment,typeddict-item]
+        remote.update(copy.deepcopy(remote_payload))
+        return True
 
     def _refresh_device_info(self) -> None:
         group = self._group

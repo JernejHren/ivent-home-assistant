@@ -15,6 +15,11 @@ PLATFORMS: Final = [
 # Konfiguracijske vrednosti
 CONF_LOCATION_ID: Final = "location_id"
 
+# Rezervirana skupina "vse naprave" (Group_0 v dokumentaciji, id 1 v praksi).
+# Oblak ukazov nanjo ne razširi na ostale skupine, zato jih integracija
+# razširi sama (kot uradna aplikacija).
+ALL_GROUPS_ID: Final = 1
+
 # Atributi
 ATTR_GROUP_ID: Final = "group_id"
 ATTR_DEVICES: Final = "devices"

@@ -105,7 +105,7 @@ class IVentVentilationModeSelect(IVentGroupEntity, SelectEntity):
             return
         payload = self._build_remote_settings_payload(
             api_mode,
-            group.remote_control_speed,
+            None,
             keep_off=True,
         )
         await self._async_handle_write("current_option", option, self.async_update_group(payload))
@@ -143,7 +143,7 @@ class IVentSpeedSelect(IVentGroupEntity, SelectEntity):
         if group is None:
             return
         payload = self._build_remote_settings_payload(
-            group.remote_control_work_mode,
+            None,
             speed,
             keep_off=True,
         )
