@@ -1,7 +1,11 @@
 rules:
   # BRONZE
   action-setup: done
-  appropriate-polling: done
+  appropriate-polling:
+    status: done
+    comment: >
+      Cloud mode polls every 60 s (no push available). Local/hybrid modes use
+      UDP push from the Location Master and poll only every 120 s as a safety net.
   brands: done
   common-modules: done
   config-flow-test-coverage: done
@@ -26,7 +30,9 @@ rules:
   diagnostics: done
   discovery-update-info:
     status: exempt
-    comment: Cloud API ne podpira device discovery.
+    comment: >
+      Cloud API ne podpira device discovery. Lokalni načini Master odkrijejo
+      ob nastavitvi (UDP 1028), samodejnega preklopa ob spremembi IP še ni.
   docs-data-update: done
   docs-known-limitations: done
   docs-supported-devices: done
