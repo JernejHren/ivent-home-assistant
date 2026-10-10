@@ -1,21 +1,6 @@
 {
   "config": {
     "step": {
-      "user": {
-        "title": "i-Vent Smart Home Settings",
-        "description": "Enter the API key from the i-Vent web interface ({api_url}). Location discovery will start automatically.",
-        "data": {
-          "api_key": "API Key",
-          "location_id": "Location ID (Optional)"
-        }
-      },
-      "location": {
-        "title": "Select Location",
-        "description": "Multiple locations found. Please select which one to configure.",
-        "data": {
-          "location_id": "Location"
-        }
-      },
       "reauth_confirm": {
         "title": "i-Vent Reauthentication",
         "description": "Please re-enter your API key to refresh the connection.",
@@ -25,22 +10,67 @@
       },
       "reconfigure": {
         "title": "i-Vent Reconfiguration",
-        "description": "Update the connection details for this location.",
+        "description": "Choose the (new) mode for this location.",
+        "menu_options": {
+          "cloud": "Cloud only",
+          "local": "Local only (no internet)",
+          "hybrid": "Combined (local + cloud)"
+        }
+      },
+      "user": {
+        "title": "i-Vent Smart Home",
+        "description": "Choose how the integration should work.",
+        "menu_options": {
+          "cloud": "Cloud only",
+          "local": "Local only (no internet)",
+          "hybrid": "Combined (local + cloud)"
+        }
+      },
+      "cloud": {
+        "title": "i-Vent cloud",
+        "description": "Enter the API key and the location ID from the i-Vent web interface ({api_url}). An API key is valid for one location only and the official API has no location list, so enter the location ID yourself (the number in the location URL, e.g. …/live/123).",
         "data": {
           "api_key": "API Key",
           "location_id": "Location ID"
+        }
+      },
+      "hybrid": {
+        "title": "Combined: cloud",
+        "description": "Enter the API key ({api_url}). You can leave the location ID empty: local Master discovery determines it (it is the same in the cloud). You will then set up the local connection. State and commands go local; the cloud is used for schedules and as a write fallback.",
+        "data": {
+          "api_key": "API Key",
+          "location_id": "Location ID (optional)"
+        }
+      },
+      "local": {
+        "title": "Local connection",
+        "description": "Enter the Location Master address. Fields left empty are discovered automatically by listening for the broadcast (a few seconds). On networks without broadcast (e.g. Docker bridge) enter IP and MAC manually.",
+        "data": {
+          "local_host": "Master IP address",
+          "local_mac": "Master MAC address",
+          "location_id": "Location ID (locationId)"
+        },
+        "data_description": {
+          "location_id": "The only credential of the local protocol; do not share it. It equals the cloud location ID."
         }
       }
     },
     "error": {
       "auth_error": "Authentication error. Check your API key.",
       "cannot_connect": "Connection failed. Check internet connection.",
-      "no_locations": "No locations found for this API key."
+      "cannot_connect_local": "The Master does not respond. Check IP, MAC and location ID.",
+      "discovery_failed": "The Master could not be discovered. Enter IP, MAC and location ID manually.",
+      "invalid_mac": "Invalid MAC address (format aa:bb:cc:dd:ee:ff).",
+      "invalid_location_id": "Invalid location ID.",
+      "location_mismatch": "The discovered Master belongs to a different location.",
+      "port_in_use": "UDP port 1028 is in use. Close the other application using it.",
+      "location_id_required": "The location ID is required: locations cannot be listed automatically (an API key is valid for one location). Enter the location ID."
     },
     "abort": {
       "already_configured": "This location is already configured.",
       "reauth_successful": "Reauthentication successful.",
-      "reconfigure_successful": "Reconfiguration successful."
+      "reconfigure_successful": "Reconfiguration successful.",
+      "single_local_entry": "Local control is possible for one location only (one UDP socket per host)."
     }
   },
   "entity": {
@@ -120,6 +150,22 @@
       "move_device": {
         "name": "Move to group"
       }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "i-Vent options",
+        "data": {
+          "info_fallback": "State from cloud when the Master is unreachable"
+        },
+        "data_description": {
+          "info_fallback": "When the local connection drops, state is read from the cloud. Off: entities become unavailable."
+        }
+      }
+    },
+    "abort": {
+      "no_options": "This mode has no options."
     }
   }
 }
