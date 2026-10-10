@@ -8,7 +8,8 @@ from homeassistant.components.diagnostics import async_redact_data
 from .const import DOMAIN
 
 # Polja, ki vsebujejo osebne/občutljive podatke
-TO_REDACT = {"api_key", "mac_address", "Authorization"}
+# location_id je v lokalnem načinu edina poverilnica protokola
+TO_REDACT = {"api_key", "mac_address", "Authorization", "location_id", "local_mac"}
 
 
 def _redact_coordinator_data(data: Any) -> Dict[str, Any]:

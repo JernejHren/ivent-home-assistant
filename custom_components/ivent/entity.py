@@ -16,9 +16,11 @@ SCHEDULE entities: {entry_id}_schedule_{schedule_id}
 DeviceInfo strategy
 ───────────────────
 - Group devices:   identifiers={(DOMAIN, f"{entry_id}_{group_id}")}
-                   via_device=(DOMAIN, entry_id)   ← the "i-Vent System" service device
+                   linked to the "i-Vent System" service device (see _via_device)
 - Physical devices: identifiers={(DOMAIN, mac_address)}
-                    via_device=(DOMAIN, entry_id)
+                    linked to the same service device
+- The link uses ``via_device_id`` (registry id) on Home Assistant versions that
+  support it and the deprecated ``via_device`` identifier tuple on older ones.
 - Device **names** are NOT mutated after init — Home Assistant's device registry
   updates the name automatically when it sees the same identifiers with a new name
   on coordinator updates (via entity re-registration / DeviceInfo refresh).
@@ -32,6 +34,7 @@ from time import monotonic
 from typing import Any, Dict
 
 from homeassistant.core import callback
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.device_registry import DeviceInfo
 
@@ -40,6 +43,26 @@ from .coordinator import IVentCoordinator, IVentGroupData, IVentDeviceData
 from .api import IVentScheduleItem
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _supports_via_device_id() -> bool:
+    """HA >= 2026.x: DeviceInfo ima ``via_device_id``; ``via_device`` je zastarel (2027.8)."""
+    return "via_device_id" in getattr(DeviceInfo, "__annotations__", {})
+
+
+def _via_device(coordinator: IVentCoordinator) -> Dict[str, Any]:
+    """Povezava naprave s servisno napravo "i-Vent System" (ustvarjena v async_setup_entry)."""
+    entry_id = coordinator.config_entry.entry_id
+    if not _supports_via_device_id():
+        return {"via_device": (DOMAIN, entry_id)}
+    registry = dr.async_get(coordinator.hass)
+    lookup = getattr(registry, "async_get_device_by_identifier", None)
+    if lookup is not None:
+        # novi HA: identifikatorji so enolični le znotraj vnosa; async_get_device je zastarel
+        hub = lookup((DOMAIN, entry_id), entry_id)
+    else:  # pragma: no cover - HA, ki že pozna via_device_id, ima tudi novi iskalnik
+        hub = registry.async_get_device(identifiers={(DOMAIN, entry_id)})
+    return {"via_device_id": hub.id} if hub is not None else {}
 
 # Polja ModifyGroup, ki jih ima smisel razširiti iz skupine "vse naprave"
 # na prave skupine. Preimenovanje in brisanje se nikoli ne razširita.
@@ -179,8 +202,8 @@ class IVentGroupEntity(IVentBaseEntity):
             name=group_data.name,
             manufacturer="i-Vent",
             model="Ventilation Group",
-            via_device=(DOMAIN, coordinator.config_entry.entry_id),
         )
+        self._attr_device_info.update(_via_device(coordinator))  # type: ignore[typeddict-item]
 
     # ------------------------------------------------------------------
     # Single property: always fresh from coordinator.data (no local copy)
@@ -439,8 +462,8 @@ class IVentDeviceEntity(IVentBaseEntity):
             manufacturer="i-Vent",
             model="Smart Ventilator",
             sw_version=device_data.firmware_version or None,
-            via_device=(DOMAIN, coordinator.config_entry.entry_id),
         )
+        self._attr_device_info.update(_via_device(coordinator))  # type: ignore[typeddict-item]
 
     # ------------------------------------------------------------------
     # Single property: always fresh from coordinator.data (no local copy)
