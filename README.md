@@ -4,15 +4,40 @@
 ![Quality Scale](https://img.shields.io/badge/Quality_Scale-Platinum-blue)
 ![HA Version](https://img.shields.io/badge/Home_Assistant-2024.1+-blue.svg)
 
-Integracija po meri za pametne prezračevalne sisteme **i-Vent**. Omogoča popoln nadzor in avtomatizacijo vaših i-Vent ventilatorskih enot neposredno preko lokalnega Home Assistant sistema z uporabo uradnega i-Vent Cloud API-ja.
+Integracija po meri za pametne prezračevalne sisteme **i-Vent**. Omogoča popoln nadzor in avtomatizacijo vaših i-Vent ventilatorskih enot neposredno preko lokalnega Home Assistant sistema. Deluje prek uradnega i-Vent Cloud API-ja, **eksperimentalno pa tudi lokalno** (brez interneta) ali kombinirano; glej [Načini delovanja](#načini-delovanja).
 
 Zgrajena z mislijo na Platinum HA standarde: ponuja dinamično zaznavanje naprav, strogo tipiziranje in celovito podporo diagnostiki.
 
 ---
 
+## Načini delovanja
+
+Ob dodajanju integracije izberete način (kasneje ga lahko spremenite z **Rekonfiguracijo**; entitete se ne podvojijo):
+
+| Način | Stanje in ukazi | Urniki, nove skupine | Potrebujete |
+|---|---|---|---|
+| **Samo oblak** | oblak (polling 60 s, spremembe iz uradne aplikacije se v HA pokažejo do ~60 s pozneje) | oblak | API ključ, ID lokacije |
+| **Samo lokalno** *(eksperimentalno)* | lokalno po UDP, takojšnje spremembe (push) | **niso podprti** | IP/MAC Masterja ali odkrivanje |
+| **Kombinirano** *(eksperimentalno)* | lokalno; oblak kot rezerva za pisanje, ko Master ni dosegljiv | oblak | oboje |
+
+### Lokalno upravljanje (eksperimentalno)
+
+Lokalni protokol ni uradno dokumentiran; integracija ga uporablja na podlagi analize uradne aplikacije. Ujema se z oblakom (stanje, skupine, naprave), preizkušen pa je na omejenem naboru enot (firmware 2.4.7).
+
+- **Master:** vsaka lokacija ima eno enoto, ki je *Location Master*. Integracija govori samo z njo; ostale skupine in naprave doseže prek nje. Spremembo Masterja (drugi IP/MAC) integracija zazna in zapiše v dnevnik, samodejnega preklopa na novega Masterja pa še ni: posodobite IP/MAC z **Rekonfiguracijo**.
+- **Odkrivanje:** polja IP, MAC in ID lokacije lahko pustite prazna; integracija do ~8 s posluša oglase Masterja na UDP 1028. Če to ne uspe, jih vnesite ročno.
+- **Omrežje:** HA in enote morajo biti v istem podomrežju. Odkrivanje in push potrebujeta **broadcast** (UDP 1028), ki ga Docker v načinu `bridge` ne prepušča: tam uporabite `host` omrežje ali ročni vnos (push takrat ne deluje, osveževanje je periodično).
+- **Ena lokacija:** lokalno upravljanje je možno samo za eno lokacijo na Home Assistant (enota sprejema ukaze samo z izvornega vrat 1028, zato je možen en socket). Vrata 1028 ne sme uporabljati nobena druga aplikacija na istem računalniku.
+- **Osveževanje:** ko oglasi Masterja prihajajo (~5 s), so spremembe vidne takoj, polling pa je varnostna mreža na 120 s; sicer ostane 60 s.
+- **Ni podprto lokalno:** urniki in ustvarjanje skupin (v kombiniranem načinu gre to prek oblaka). Hitrost, načini, posebni načini, LED in preimenovanje skupin in naprav so preizkušeni na pravi enoti; **brisanje skupine in premik naprave med skupinami še nista preizkušena**.
+- **Varnost:** ID lokacije je edina "poverilnica" lokalnega protokola in ga enote oddajajo nešifrirano po lokalnem omrežju. Vsak v istem omrežju ga lahko prebere in nato upravlja prezračevanje. Lokalnega načina ne uporabljajte v omrežju, ki mu ne zaupate; v diagnostiki je ID lokacije skrit.
+- **Kombinirano, rezerva stanja:** v nastavitvah vnosa lahko vklopite branje stanja iz oblaka, ko Master ni dosegljiv (privzeto izklopljeno, da stanje ne preskakuje med dvema viroma).
+
+---
+
 ## Predpogoji
 
-Za povezavo integracije boste potrebovali:
+Za povezavo v načinu *Samo oblak* ali *Kombinirano* boste potrebovali:
 - **i-Vent cloud račun**, ki ga ustvarite in do dostopate na [https://cloud.i-vent.com/](https://cloud.i-vent.com/).
 - **API ključ:** Pojdite v nastavitve uporabnika in ustvarite nov API ključ.
 - **ID lokacije:** Ko na nadzorni plošči odprete svojo lokacijo, preberite številko/ID iz URL naslova brskalnika (npr. če je URL `https://cloud.i-vent.com/live/123`, je ID lokacije `123`).
@@ -36,8 +61,9 @@ Za povezavo integracije boste potrebovali:
 ### Konfiguracija
 1. Sledite poti: **Settings (Nastavitve)** → **Devices & Services (Naprave in storitve)** → **Add Integration (Dodaj integracijo)**.
 2. Poiščite **i-Vent Smart Home**.
-3. Vnesite svoj **API ključ** in **ID lokacije**.
-4. Po uspešni potrditvi bo integracija dinamično in samodejno uvozila vse vaše skupine, naprave in urnike.
+3. Izberite način delovanja (glej [Načini delovanja](#načini-delovanja)).
+4. Vnesite zahtevane podatke: **API ključ** in **ID lokacije** (oblak) in/ali podatke Masterja (lokalno). ID lokacije je v načinu *Samo oblak* obvezen: API ključ velja za eno lokacijo, uradni API pa seznama lokacij ne ponuja. V načinu *Kombinirano* ga lahko pustite praznega, določi ga odkrivanje Masterja.
+5. Po uspešni potrditvi bo integracija dinamično in samodejno uvozila vse vaše skupine, naprave in urnike.
 
 ---
 
@@ -142,7 +168,7 @@ action:
 
 ## Znane omejitve
 
-- **Brez Push tehnologije**: Sistem uporablja lokalno prožen "Polling", pri katerem preko API-ja poizveduje na vsakih 60 sekund. Morebitne spremembe iz i-Vent mobilne aplikacije bodo morda vidne s kratkim zamikom.
+- **Push samo lokalno**: v načinu *Samo oblak* integracija poizveduje prek API-ja na vsakih 60 sekund (interval ni nastavljiv, da ne obremenjujemo oblaka). Sprememba v uradni aplikaciji (npr. hitrost) se zato v Home Assistantu pokaže šele ob naslednji poizvedbi, torej do ~60 s pozneje. Ukazi iz HA se v oblaku izvedejo takoj. Lokalni in kombinirani način prejemata spremembe takoj (push, ~1–2 s); če potrebujete hitro odzivnost, uporabite enega od njiju (glej [Načini delovanja](#načini-delovanja)).
 - **Ni uradnega Device Discovery**: Zaradi narave Cloud API-ja trenutno ne more podpreti ZeroConf mDNS ali Bluetooth iskanja. Naprave se odkrijejo *strogo* ob inicializaciji API ključa ali med polling ciklusom ("Dynamic Devices").
 - Trenutno ni uradne rešitve **popravil** (Repair Issues); ob tekoči napaki vas aplikacija zgolj obvesti o "Reavtentikaciji" in ponuja potrditev ključev.
 
@@ -152,6 +178,7 @@ action:
 
 - **"Reauth failed" / Autentikacijske napake (HTTP 401)**: To se pogosto zgodi, če prekličete API ključ na portalu i-Vent ali vnesete napačne podatke. Integracija bo samodejno postavila entitete na `Unavailable` stanje in sprožila vmesnik za ponoven vnos gesla/ključa na nadzorni plošči (Setup Reauthentication Flow).
 - **Napaka "Cannot Connect" (HTTP/Timeout)**: Vaš internet je padel ali pa ima i-Vent strežnik začasne izpade. Na integracijski enoti se bodo obdržala stara stanja, posodobitve se pa morda ponovijo kasneje.
+- **Lokalni način ne najde Masterja / "Cannot connect"**: preverite, da HA in enote niso v ločenih omrežjih (VLAN), da vrat UDP 1028 ne uporablja druga aplikacija in da za Docker velja `host` omrežje. Vklopite `debug` za `custom_components.ivent` in preverite zapise o oglasih Masterja ter ponovitvah zahtevkov. Če odkrivanje ne uspe, vnesite IP in MAC ročno.
 - **Diagnostics**: Če naletite na neznan tehnični lapsus - omogočili smo funkcijo "Download Diagnostics". Pod `Settings -> Integrations -> i-Vent` enostavno prenesite datoteko za popravila, zbrani podatki bodo anonimizirani (brez ključev)! 
 
 ### Skupnost in Podpora
