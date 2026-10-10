@@ -74,12 +74,13 @@ class IVentScheduleGroup(TypedDict):
     schedules: List[IVentScheduleItem]
 
 
-class IVentApiClientError(Exception):
-    """Splošna napaka za API odjemalca (``status`` = HTTP koda, če je znana)."""
+class IVentLocation(TypedDict):
+    id: str
+    name: str
 
-    def __init__(self, *args: object, status: int | None = None) -> None:
-        super().__init__(*args)
-        self.status = status
+
+class IVentApiClientError(Exception):
+    """Splošna napaka za API odjemalca."""
 
 class IVentApiAuthError(IVentApiClientError):
     """Napaka pri avtentikaciji."""
@@ -89,9 +90,6 @@ class IVentApiConnectionError(IVentApiClientError):
 
 class IVentApiInvalidResponseError(IVentApiClientError):
     """Napaka zaradi neveljavnega ali nepričakovanega odgovora API."""
-
-class IVentApiUnsupportedError(IVentApiClientError):
-    """Operacija na izbranem backendu ni podprta (npr. urniki v lokalnem načinu)."""
 
 class IVentApiClient:
     """Odjemalec za komunikacijo z i-Vent API."""
@@ -131,9 +129,7 @@ class IVentApiClient:
                     try:
                         response.raise_for_status()
                     except aiohttp.ClientResponseError as e:
-                        raise IVentApiClientError(
-                            f"HTTP error {response.status} from API: {e}", status=response.status
-                        ) from e
+                        raise IVentApiClientError(f"HTTP error {response.status} from API: {e}") from e
 
                     # Obravnava uspešnih odgovorov
                     if response.status == 204:
@@ -154,6 +150,11 @@ class IVentApiClient:
                 # Eksponentni backoff pri omrežnih napakah
                 await asyncio.sleep(backoff)
                 backoff *= 2
+
+    async def async_get_locations(self) -> List[IVentLocation]:
+        """Pridobi seznam razpoložljivih lokacij."""
+        result = await self._request("get", "/locations")
+        return cast(List[IVentLocation], result)
 
     async def async_get_info(self) -> IVentInfoData:
         """Pridobi stanje sistema, vključno s skupinami in napravami."""

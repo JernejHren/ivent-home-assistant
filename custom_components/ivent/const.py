@@ -13,18 +13,7 @@ PLATFORMS: Final = [
 ]
 
 # Konfiguracijske vrednosti
-CONF_LOCATION_ID: Final = "location_id"  # u64 kot decimalni niz; enak v oblaku in lokalno
-CONF_MODE: Final = "mode"
-CONF_LOCAL_HOST: Final = "local_host"  # IP Location Masterja
-CONF_LOCAL_MAC: Final = "local_mac"  # MAC Location Masterja (naslov v UDPC glavi)
-
-MODE_CLOUD: Final = "cloud"
-MODE_LOCAL: Final = "local"
-MODE_HYBRID: Final = "hybrid"
-LOCAL_MODES: Final = (MODE_LOCAL, MODE_HYBRID)
-
-# Nastavitve (options)
-OPT_INFO_FALLBACK: Final = "info_fallback"  # hibrid: stanje iz oblaka, ko Master ni dosegljiv
+CONF_LOCATION_ID: Final = "location_id"
 
 # Rezervirana skupina "vse naprave" (Group_0 v dokumentaciji, id 1 v praksi).
 # Oblak ukazov nanjo ne razširi na ostale skupine, zato jih integracija

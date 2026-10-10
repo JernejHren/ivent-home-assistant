@@ -14,82 +14,28 @@ from homeassistant.helpers import (
 from homeassistant.exceptions import ServiceValidationError
 
 from .api import IVentApiClient, IVentApiClientError
-from .backend import IVentBackend
-from .config_flow import OPTIONS_AUTO_RELOAD
-from .const import (
-    CONF_LOCAL_HOST, CONF_LOCAL_MAC, CONF_LOCATION_ID, CONF_MODE, DOMAIN, MODE_CLOUD,
-    MODE_HYBRID, MODE_LOCAL, OPT_INFO_FALLBACK, PLATFORMS,
-)
-from .local_backend import IVentHybridBackend, IVentLocalBackend
+from .const import DOMAIN, PLATFORMS
 from .coordinator import IVentCoordinator
 
 _LOGGER = logging.getLogger(__name__)
-
-
-def _build_backend(hass: HomeAssistant, entry: ConfigEntry) -> IVentBackend:
-    """Backend glede na izbrani način (vnosi brez ``mode`` so oblačni)."""
-    mode = entry.data.get(CONF_MODE, MODE_CLOUD)
-
-    def cloud() -> IVentApiClient:
-        return IVentApiClient(
-            session=async_get_clientsession(hass),
-            api_key=entry.data["api_key"],
-            location_id=entry.data[CONF_LOCATION_ID],
-        )
-
-    if mode == MODE_CLOUD:
-        return cloud()
-
-    local = IVentLocalBackend.create(
-        # oblak sprejema u64 tudi predznačeno; lokalno vedno nepredznačeno
-        location_id=int(entry.data[CONF_LOCATION_ID]) % (1 << 64),
-        master_host=entry.data[CONF_LOCAL_HOST],
-        master_mac=entry.data[CONF_LOCAL_MAC],
-    )
-    if mode == MODE_LOCAL:
-        return local
-    return IVentHybridBackend(
-        local, cloud(), info_fallback=entry.options.get(OPT_INFO_FALLBACK, False))
-
-
-async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Starejši HA: ponovno naloži vnos, a samo ob spremembi nastavitev.
-
-    Listener se sproži ob vsaki spremembi vnosa (tudi pri rekonfiguraciji, ki vnos
-    sama ponovno naloži), zato primerjamo z nastavitvami ob zagonu.
-    Na novejšem HA tega ne uporabljamo: OptionsFlowWithReload naloži vnos sam.
-    """
-    entry_data = hass.data.get(DOMAIN, {}).get(entry.entry_id)
-    if entry_data is not None and entry_data.get("options") == dict(entry.options):
-        return
-    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Nastavi i-Vent integracijo iz konfiguracijskega vnosa."""
     hass.data.setdefault(DOMAIN, {})
 
-    mode = entry.data.get(CONF_MODE, MODE_CLOUD)
-    if mode == MODE_CLOUD:
-        _LOGGER.info("Setting up i-Vent in cloud mode")
-    else:
-        _LOGGER.info("Setting up i-Vent in %s mode (Master %s)", mode, entry.data[CONF_LOCAL_HOST])
-    client = _build_backend(hass, entry)
-    if not OPTIONS_AUTO_RELOAD:
-        entry.async_on_unload(entry.add_update_listener(_async_options_updated))
+    client = IVentApiClient(
+        session=async_get_clientsession(hass),
+        api_key=entry.data["api_key"],
+        location_id=entry.data["location_id"],
+    )
 
     coordinator = IVentCoordinator(hass, client, entry)
-    await coordinator.async_start_push()  # no-op pri oblačnem odjemalcu
-    try:
-        await coordinator.async_config_entry_first_refresh()
-    except Exception:
-        await coordinator.async_stop_push()
-        raise
+    await coordinator.async_config_entry_first_refresh()
 
     hass.data[DOMAIN][entry.entry_id] = {
         "coordinator": coordinator,
         "client": client,
-        "options": dict(entry.options),  # za primerjavo v _async_options_updated (star HA)
     }
 
     # Ustvarimo glavno "servisno" napravo, na katero se vežejo vse ostale (via_device)
@@ -99,12 +45,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         identifiers={(DOMAIN, entry.entry_id)},
         manufacturer="i-Vent",
         name="i-Vent System",
-        model={MODE_CLOUD: "Cloud Location", MODE_LOCAL: "Local Location",
-               MODE_HYBRID: "Hybrid Location"}.get(entry.data.get(CONF_MODE, MODE_CLOUD),
-                                                    "Cloud Location"),
+        model="Cloud Location",
         entry_type=dr.DeviceEntryType.SERVICE,
-        configuration_url=(
-            None if entry.data.get(CONF_MODE) == MODE_LOCAL else "https://cloud.i-vent.com/"),
+        configuration_url="https://cloud.i-vent.com/",
     )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -247,34 +190,24 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
 
         hass.config_entries.async_update_entry(config_entry, version=3)
 
-    if config_entry.version < 4:
-        # v4: izbira načina delovanja; obstoječi vnosi so oblačni
-        hass.config_entries.async_update_entry(
-            config_entry, data={**config_entry.data, CONF_MODE: MODE_CLOUD}, version=4)
-
     _LOGGER.info("Migration to version %s successful", config_entry.version)
 
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Odstrani konfiguracijski vnos (tudi če setup ni dokončal priprave podatkov)."""
-    domain_data = hass.data.get(DOMAIN, {})
-    entry_data = domain_data.get(entry.entry_id)
-    coordinator = entry_data["coordinator"] if entry_data else None
-    if coordinator is not None:
-        task = coordinator._pending_refresh_task
-        if task and not task.done():
-            task.cancel()
-        coordinator._pending_refresh_task = None
+    """Odstrani konfiguracijski vnos."""
+    coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+    task = coordinator._pending_refresh_task
+    if task and not task.done():
+        task.cancel()
+    coordinator._pending_refresh_task = None
 
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
-        if coordinator is not None:
-            await coordinator.async_stop_push()
-        domain_data.pop(entry.entry_id, None)
+        hass.data[DOMAIN].pop(entry.entry_id)
 
-    if len(domain_data) == 0:
+    if len(hass.data[DOMAIN]) == 0:
         for service in ("create_group", "delete_group", "rename_group",
                         "rename_device", "move_device_to_group"):
             if hass.services.has_service(DOMAIN, service):

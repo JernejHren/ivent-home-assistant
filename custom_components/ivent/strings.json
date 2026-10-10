@@ -1,6 +1,21 @@
 {
   "config": {
     "step": {
+      "user": {
+        "title": "i-Vent Smart Home Nastavitve",
+        "description": "Vnesite API ključ, ki ga dobite v i-Vent spletnem vmesniku ({api_url}). Iskanje lokacij se bo začelo samodejno.",
+        "data": {
+          "api_key": "API Ključ",
+          "location_id": "ID Lokacije (Opcijsko)"
+        }
+      },
+      "location": {
+        "title": "Izbira lokacije",
+        "description": "Najdenih je bilo več lokacij. Prosimo, izberite, katero želite nastaviti.",
+        "data": {
+          "location_id": "Lokacija"
+        }
+      },
       "reauth_confirm": {
         "title": "i-Vent Ponovna avtentikacija",
         "description": "Ponovno vnesite API ključ, da osvežite povezavo.",
@@ -10,67 +25,22 @@
       },
       "reconfigure": {
         "title": "i-Vent Rekonfiguracija",
-        "description": "Izberite (nov) način delovanja za to lokacijo.",
-        "menu_options": {
-          "cloud": "Samo oblak",
-          "local": "Samo lokalno (brez interneta)",
-          "hybrid": "Kombinirano (lokalno + oblak)"
-        }
-      },
-      "user": {
-        "title": "i-Vent Smart Home",
-        "description": "Izberite način delovanja integracije.",
-        "menu_options": {
-          "cloud": "Samo oblak",
-          "local": "Samo lokalno (brez interneta)",
-          "hybrid": "Kombinirano (lokalno + oblak)"
-        }
-      },
-      "cloud": {
-        "title": "i-Vent oblak",
-        "description": "Vnesite API ključ in ID lokacije iz i-Vent spletnega vmesnika ({api_url}). API ključ velja samo za eno lokacijo, uradni API pa seznama lokacij ne ponuja, zato ID lokacije vnesite sami (številka v naslovu lokacije, npr. …/live/123).",
+        "description": "Posodobite podatke o povezavi za to lokacijo.",
         "data": {
           "api_key": "API Ključ",
           "location_id": "ID Lokacije"
-        }
-      },
-      "hybrid": {
-        "title": "Kombinirano: oblak",
-        "description": "Vnesite API ključ ({api_url}). ID lokacije lahko pustite praznega: določi ga lokalno odkrivanje Masterja (enak je v oblaku). Nato nastavite še lokalno povezavo. Stanje in ukazi gredo lokalno, oblak služi za urnike in kot rezerva za pisanje.",
-        "data": {
-          "api_key": "API Ključ",
-          "location_id": "ID Lokacije (opcijsko)"
-        }
-      },
-      "local": {
-        "title": "Lokalna povezava",
-        "description": "Vnesite naslov Location Masterja. Polja, ki jih pustite praznih, se odkrijejo samodejno s poslušanjem broadcasta (do nekaj sekund). V omrežjih brez broadcasta (npr. Docker bridge) vnesite IP in MAC ročno.",
-        "data": {
-          "local_host": "IP naslov Masterja",
-          "local_mac": "MAC naslov Masterja",
-          "location_id": "ID lokacije (locationId)"
-        },
-        "data_description": {
-          "location_id": "Edina poverilnica lokalnega protokola, nikomur je ne razkrivajte. Enaka je ID-ju lokacije v oblaku."
         }
       }
     },
     "error": {
       "auth_error": "Napaka pri avtentikaciji. Preverite API ključ.",
       "cannot_connect": "Povezava z i-Vent strežnikom ni uspela. Preverite internetno povezavo.",
-      "cannot_connect_local": "Master ne odgovarja. Preverite IP, MAC in ID lokacije.",
-      "discovery_failed": "Masterja ni bilo mogoče odkriti. Vnesite IP, MAC in ID lokacije ročno.",
-      "invalid_mac": "Neveljaven MAC naslov (oblika aa:bb:cc:dd:ee:ff).",
-      "invalid_location_id": "Neveljaven ID lokacije.",
-      "location_mismatch": "Odkriti Master pripada drugi lokaciji.",
-      "port_in_use": "UDP vrata 1028 so zasedena. Zaprite drugo aplikacijo, ki jih uporablja.",
-      "location_id_required": "ID lokacije je obvezen: seznama lokacij ni mogoče pridobiti samodejno (API ključ velja za eno lokacijo). Vnesite ID lokacije."
+      "no_locations": "Za ta API ključ ni bila najdena nobena lokacija."
     },
     "abort": {
       "already_configured": "Ta lokacija je že nastavljena.",
       "reauth_successful": "Ponovna avtentikacija je bila uspešna.",
-      "reconfigure_successful": "Rekonfiguracija je bila uspešna.",
-      "single_local_entry": "Lokalno upravljanje je možno samo za eno lokacijo (en UDP socket na gostitelja)."
+      "reconfigure_successful": "Rekonfiguracija je bila uspešna."
     }
   },
   "entity": {
@@ -150,22 +120,6 @@
       "move_device": {
         "name": "Premakni enoto v skupino"
       }
-    }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "title": "i-Vent nastavitve",
-        "data": {
-          "info_fallback": "Stanje iz oblaka, ko Master ni dosegljiv"
-        },
-        "data_description": {
-          "info_fallback": "Ob izpadu lokalne povezave se stanje bere iz oblaka. Izklopljeno: entitete postanejo nedosegljive."
-        }
-      }
-    },
-    "abort": {
-      "no_options": "Ta način delovanja nima nastavitev."
     }
   }
 }
