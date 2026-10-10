@@ -38,7 +38,7 @@ Po vsakem koraku se vrni v prvotno stanje.
 - [ ] LED način skupine (Dnevna): vklop/izklop. Zvočno opozorilo (`buzzerMode`): vklop in izklop (ni še bil preizkušen).
 - [ ] Preimenovanje naprave in vrnitev (ime je UTF-8, poskusi tudi šumnike).
 - [ ] **Skupina "iVent" (vse naprave):** ukaz (npr. Boost ali hitrost) se izvede na *obeh* pravih skupinah, vsaka obdrži svoj način in hitrost.
-  - **Neznanka:** integracija zapiše ukaz tudi v samo skupino "iVent" (da je prikaz usklajen), uradna aplikacija pa tega *ne dela* (pošlje samo dva ukaza, na pravi skupini). Preveri, da zapis v skupino 1 nič ne pokvari (npr. da naprave ne reagirajo dvakrat, da v aplikaciji ni čudnega stanja) in zapiši vedenje; če je sporno, se zapis v skupino 1 lokalno izpusti.
+  - **Potrjeno (10. 10.):** deluje pravilno. Opomba: integracija zapiše ukaz tudi v samo skupino "iVent" (da je prikaz usklajen), uradna aplikacija pa tega *ne dela* (pošlje samo dva ukaza, na pravi skupini). Preveri, da zapis v skupino 1 nič ne pokvari (npr. da naprave ne reagirajo dvakrat, da v aplikaciji ni čudnega stanja) in zapiši vedenje; če je sporno, se zapis v skupino 1 lokalno izpusti.
 - [ ] *Obrni smer ventilatorja* (`reverseFlow`) na eni napravi: fizično obrne smer pretoka; vrni nazaj.
 
 ## 3. Push in osveževanje
