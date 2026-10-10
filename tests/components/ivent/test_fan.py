@@ -129,15 +129,25 @@ async def test_fan_optimistic_update(hass, mock_config_entry, mock_api_client):
     # Original state is on, percentage might be 33
     fan_id = "fan.dnevna_soba_fan"
     
+    coordinator = hass.data[DOMAIN][mock_config_entry.entry_id]["coordinator"]
+    import copy
+    original_remotes = {
+        gid: copy.deepcopy(g.raw["remote"]) for gid, g in coordinator.data.groups_by_id.items()
+    }
+
     # We turn it to 100%
     await hass.services.async_call('fan', 'turn_on', {'entity_id': fan_id, 'percentage': 100}, blocking=True)
     
     state = hass.states.get(fan_id)
     assert state.attributes.get("percentage") == 100
+
+    # A successful write is applied to the coordinator data right away (see
+    # _apply_successful_group_write), so a poll that still returns the OLD state
+    # (cloud lag) has to be simulated by restoring the pre-write remote data.
+    for gid, remote in original_remotes.items():
+        coordinator.data.groups_by_id[gid].raw["remote"].update(remote)
     
-    coordinator = hass.data[DOMAIN][mock_config_entry.entry_id]["coordinator"]
-    
-    # Simulate a coordinator polling within 2 seconds. The data might still say speed is 1 (33%)
+    # Simulate a coordinator polling within 2 seconds. The data still says speed is 1 (33%)
     # Patch only integration monotonic usage used by optimistic cache logic.
     # Patching global time.monotonic can break asyncio internals and cause timeouts.
     with patch(

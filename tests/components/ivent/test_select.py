@@ -87,14 +87,22 @@ async def test_select_optimistic_update(hass: HomeAssistant, mock_config_entry, 
     await hass.async_block_till_done()
 
     speed_entity = "select.dnevna_soba_speed"
+    coordinator = hass.data[DOMAIN][mock_config_entry.entry_id]["coordinator"]
+    import copy
+    original_remotes = {
+        gid: copy.deepcopy(g.raw["remote"]) for gid, g in coordinator.data.groups_by_id.items()
+    }
     
     # Send an update to Stopnja 3
     await hass.services.async_call('select', 'select_option', {'entity_id': speed_entity, 'option': 'Stopnja 3'}, blocking=True)
     
     # State should optimistically be "Stopnja 3"
     assert hass.states.get(speed_entity).state == "Stopnja 3"
-    
-    coordinator = hass.data[DOMAIN][mock_config_entry.entry_id]["coordinator"]
+
+    # A successful write is applied to the coordinator data right away, so a poll
+    # that still returns the OLD state (cloud lag) is simulated by restoring it.
+    for gid, remote in original_remotes.items():
+        coordinator.data.groups_by_id[gid].raw["remote"].update(remote)
     
     # Patch only integration optimistic timer usage, not global asyncio clock.
     with patch("custom_components.ivent.entity.monotonic", return_value=time.monotonic() + 0.5):

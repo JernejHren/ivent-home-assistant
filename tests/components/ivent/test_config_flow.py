@@ -6,95 +6,84 @@ from custom_components.ivent.api import IVentApiAuthError, IVentApiClientError
 from custom_components.ivent.const import DOMAIN
 from .conftest import MOCK_INFO_DATA
 
-# TEST 1: Uspešen setup (ena lokacija)
+async def _cloud_form(hass):
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={'source': 'user'})
+    assert result['type'] is FlowResultType.MENU
+    assert result['step_id'] == 'user'
+    assert set(result['menu_options']) == {'cloud', 'local', 'hybrid'}
+    result = await hass.config_entries.flow.async_configure(
+        result['flow_id'], {'next_step_id': 'cloud'})
+    assert result['type'] is FlowResultType.FORM and result['step_id'] == 'cloud'
+    return result
+
+
+# TEST 1: Uspešen setup (API ključ + ročni ID lokacije)
 async def test_full_flow_success(hass):
-    with patch("custom_components.ivent.config_flow.IVentApiClient") as mock:
-        # Mockamo vrnjeno lokacijo
-        mock.return_value.async_get_locations = AsyncMock(return_value=[{"id": "loc-1", "name": "Stanovanje"}])
-        
-        result = await hass.config_entries.flow.async_init(
-            DOMAIN, context={'source': 'user'}
-        )
-        assert result['type'] is FlowResultType.FORM
-        assert result['step_id'] == 'user'
-
+    with patch("custom_components.ivent.config_flow.async_get_clientsession"), \
+            patch("custom_components.ivent.config_flow.IVentApiClient") as mock:
+        mock.return_value.async_get_info = AsyncMock(return_value=MOCK_INFO_DATA)
+        result = await _cloud_form(hass)
         result = await hass.config_entries.flow.async_configure(
-            result['flow_id'],
-            {'api_key': 'valid-key'},
-        )
-    # Ker je samo ena lokacija, gre direktno v CREATE_ENTRY
+            result['flow_id'], {'api_key': 'valid-key', 'location_id': 'loc-1'})
     assert result['type'] is FlowResultType.CREATE_ENTRY
-    assert result['data']['api_key'] == 'valid-key'
-    assert result['data']['location_id'] == 'loc-1'
-    assert "Stanovanje" in result["title"]
+    assert result['title'] == 'i-Vent Cloud'
+    assert result['data'] == {'mode': 'cloud', 'api_key': 'valid-key', 'location_id': 'loc-1'}
 
-# TEST 2: Več lokacij (multi-step)
-async def test_multi_location_flow(hass):
-    with patch("custom_components.ivent.config_flow.IVentApiClient") as mock:
-        mock.return_value.async_get_locations = AsyncMock(return_value=[
-            {"id": "loc-1", "name": "Stanovanje"},
-            {"id": "loc-2", "name": "Pisarna"}
-        ])
-        
-        result = await hass.config_entries.flow.async_init(
-            DOMAIN, context={'source': 'user'}
-        )
-        result = await hass.config_entries.flow.async_configure(
-            result['flow_id'],
-            {'api_key': 'valid-key'},
-        )
-        
-        # Pojaviti se mora drugi korak 'location'
-        assert result['type'] is FlowResultType.FORM
-        assert result['step_id'] == 'location'
 
-        # Izberemo Pisarno
-        result = await hass.config_entries.flow.async_configure(
-            result['flow_id'],
-            {'location_id': 'loc-2'},
-        )
-        
-    assert result['type'] is FlowResultType.CREATE_ENTRY
-    assert result['data']['location_id'] == 'loc-2'
-    assert "Pisarna" in result["title"]
+# TEST 2: ID lokacije je v oblaku obvezen (uradni API nima seznama lokacij)
+async def test_cloud_location_id_is_required(hass):
+    from homeassistant.data_entry_flow import InvalidData
+    result = await _cloud_form(hass)
+    with pytest.raises(InvalidData):  # polje je Required: brez njega obrazca ni mogoče oddati
+        await hass.config_entries.flow.async_configure(result['flow_id'], {'api_key': 'key'})
+    result = await hass.config_entries.flow.async_configure(
+        result['flow_id'], {'api_key': 'key', 'location_id': '   '})
+    assert result['type'] is FlowResultType.FORM
+    assert result['errors']['base'] == 'location_id_required'  # prazen niz ni ID
 
 
 # TEST 3: Napačen API ključ
 async def test_flow_auth_error(hass):
-    with patch('custom_components.ivent.config_flow.IVentApiClient') as mock:
-        mock.return_value.async_get_locations.side_effect = IVentApiAuthError()
-        result = await hass.config_entries.flow.async_init(
-            DOMAIN, context={'source': 'user'}
-        )
+    with patch("custom_components.ivent.config_flow.async_get_clientsession"), \
+            patch('custom_components.ivent.config_flow.IVentApiClient') as mock:
+        mock.return_value.async_get_info.side_effect = IVentApiAuthError()
+        result = await _cloud_form(hass)
         result = await hass.config_entries.flow.async_configure(
-            result['flow_id'], {'api_key': 'bad'}
-        )
+            result['flow_id'], {'api_key': 'bad', 'location_id': 'loc-1'})
     assert result['type'] is FlowResultType.FORM
     assert result['errors']['base'] == 'auth_error'
 
+
 # TEST 4: Napaka pri povezavi
 async def test_flow_cannot_connect(hass):
-    with patch('custom_components.ivent.config_flow.IVentApiClient') as mock:
-        mock.return_value.async_get_locations.side_effect = IVentApiClientError()
-        result = await hass.config_entries.flow.async_init(
-            DOMAIN, context={'source': 'user'}
-        )
+    with patch("custom_components.ivent.config_flow.async_get_clientsession"), \
+            patch('custom_components.ivent.config_flow.IVentApiClient') as mock:
+        mock.return_value.async_get_info.side_effect = IVentApiClientError()
+        result = await _cloud_form(hass)
         result = await hass.config_entries.flow.async_configure(
-            result['flow_id'], {'api_key': 'key'}
-        )
+            result['flow_id'], {'api_key': 'key', 'location_id': 'loc-1'})
     assert result['errors']['base'] == 'cannot_connect'
+
+
+# TEST 4b: ključ ali lokacija neveljavna (HTTP 403/404 pri preverjanju lokacije)
+async def test_flow_unknown_location_is_an_error(hass):
+    with patch("custom_components.ivent.config_flow.async_get_clientsession"), \
+            patch('custom_components.ivent.config_flow.IVentApiClient') as mock:
+        mock.return_value.async_get_info.side_effect = IVentApiClientError("HTTP error 404", status=404)
+        result = await _cloud_form(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result['flow_id'], {'api_key': 'key', 'location_id': 'nope'})
+    assert result['type'] is FlowResultType.FORM and result['errors']['base'] == 'cannot_connect'
+
 
 # TEST 5: Duplikat — ista lokacija
 async def test_flow_duplicate(hass, mock_config_entry):
-    with patch("custom_components.ivent.config_flow.IVentApiClient") as mock:
-        mock.return_value.async_get_locations = AsyncMock(return_value=[{"id": "test-location-99", "name": "Test"}])
-        result = await hass.config_entries.flow.async_init(
-            DOMAIN, context={'source': 'user'}
-        )
+    with patch("custom_components.ivent.config_flow.async_get_clientsession"), \
+            patch("custom_components.ivent.config_flow.IVentApiClient") as mock:
+        mock.return_value.async_get_info = AsyncMock(return_value=MOCK_INFO_DATA)
+        result = await _cloud_form(hass)
         result = await hass.config_entries.flow.async_configure(
-            result['flow_id'],
-            {'api_key': 'key'},
-        )
+            result['flow_id'], {'api_key': 'key', 'location_id': 'test-location-99'})
     assert result['type'] is FlowResultType.ABORT
     assert result['reason'] == 'already_configured'
 
@@ -149,8 +138,12 @@ async def test_reconfigure_flow_success(hass, mock_config_entry):
         context={"source": "reconfigure", "entry_id": mock_config_entry.entry_id},
     )
     
-    assert result["type"] is FlowResultType.FORM
+    assert result["type"] is FlowResultType.MENU
     assert result["step_id"] == "reconfigure"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "cloud"})
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "cloud"
 
     with patch("custom_components.ivent.config_flow.IVentApiClient") as mock:
         mock.return_value.async_get_info = AsyncMock(return_value=MOCK_INFO_DATA)
@@ -171,6 +164,8 @@ async def test_reconfigure_flow_auth_error(hass, mock_config_entry):
         DOMAIN,
         context={"source": "reconfigure", "entry_id": mock_config_entry.entry_id},
     )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "cloud"})
 
     with patch("custom_components.ivent.config_flow.IVentApiClient") as mock:
         mock.return_value.async_get_info.side_effect = IVentApiAuthError()
@@ -180,5 +175,5 @@ async def test_reconfigure_flow_auth_error(hass, mock_config_entry):
         )
 
     assert result2["type"] is FlowResultType.FORM
-    assert result2["step_id"] == "reconfigure"
+    assert result2["step_id"] == "cloud"
     assert result2["errors"]["base"] == "auth_error"
