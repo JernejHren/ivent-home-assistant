@@ -1,0 +1,94 @@
+{
+ "network_hash": "7859259973908910546",
+ "groups": [
+  {
+   "id": 1,
+   "name": "iVent",
+   "remote": {
+    "special_mode": "IVentSpecialOff",
+    "work_mode": "IVentRecuperation1",
+    "bypass_rotation": "BypassForward",
+    "remote_control_work_mode": "Normal",
+    "remote_control_speed": 1,
+    "special_mode_ends_at": 0,
+    "work_mode_changed_at": null,
+    "current_mode_duration_in": null,
+    "current_mode_duration_out": null
+   },
+   "enable_schedule": true,
+   "led_work_mode": "LedOnMode",
+   "buzzer_work_mode": "BuzzerOnMuteErrMode",
+   "devices": []
+  },
+  {
+   "id": 828709243,
+   "name": "Dnevna",
+   "remote": {
+    "special_mode": "IVentSpecialOff",
+    "work_mode": "IVentBypass2",
+    "bypass_rotation": "BypassForward",
+    "remote_control_work_mode": "Bypass",
+    "remote_control_speed": 2,
+    "special_mode_ends_at": 0,
+    "work_mode_changed_at": 1790878181,
+    "current_mode_duration_in": null,
+    "current_mode_duration_out": null
+   },
+   "enable_schedule": true,
+   "led_work_mode": "LedOffMode",
+   "buzzer_work_mode": "BuzzerOffMode",
+   "devices": [
+    {
+     "mac_address": "98:cd:ac:00:00:41",
+     "rssi": -53,
+     "alive": true,
+     "reverse_flow": false,
+     "device_name": "98:cd:ac:00:00:41",
+     "firmware_version": 204070000,
+     "status_esp": 1024,
+     "airflow_direction": "Outwards"
+    },
+    {
+     "mac_address": "98:cd:ac:00:00:43",
+     "rssi": -71,
+     "alive": true,
+     "reverse_flow": true,
+     "device_name": "98:cd:ac:00:00:43",
+     "firmware_version": 204070000,
+     "status_esp": 1024,
+     "airflow_direction": "Inwards"
+    }
+   ]
+  },
+  {
+   "id": 1298992577,
+   "name": "Tilen",
+   "remote": {
+    "special_mode": "IVentSpecialOff",
+    "work_mode": "IVentBypass1",
+    "bypass_rotation": "BypassForward",
+    "remote_control_work_mode": "Bypass",
+    "remote_control_speed": 1,
+    "special_mode_ends_at": 1790863960,
+    "work_mode_changed_at": 1790860364,
+    "current_mode_duration_in": null,
+    "current_mode_duration_out": null
+   },
+   "enable_schedule": true,
+   "led_work_mode": "LedOffMode",
+   "buzzer_work_mode": "BuzzerOffMode",
+   "devices": [
+    {
+     "mac_address": "98:cd:ac:00:00:42",
+     "rssi": -47,
+     "alive": true,
+     "reverse_flow": true,
+     "device_name": "98:cd:ac:00:00:42",
+     "firmware_version": 204070000,
+     "status_esp": 1024,
+     "airflow_direction": "Inwards"
+    }
+   ]
+  }
+ ]
+}
