@@ -24,7 +24,7 @@ Ob dodajanju integracije izberete način (kasneje ga lahko spremenite z **Rekonf
 
 Lokalni protokol ni uradno dokumentiran; integracija ga uporablja na podlagi analize uradne aplikacije. Ujema se z oblakom (stanje, skupine, naprave), preizkušen pa je na omejenem naboru enot (firmware 2.4.7).
 
-- **Master:** vsaka lokacija ima eno enoto, ki je *Location Master*. Integracija govori samo z njo; ostale skupine in naprave doseže prek nje. Spremembo Masterja (drugi IP/MAC) integracija zazna in zapiše v dnevnik, samodejnega preklopa na novega Masterja pa še ni: posodobite IP/MAC z **Rekonfiguracijo**.
+- **Master:** vsaka lokacija ima eno enoto, ki je *Location Master*. Integracija govori samo z njo; ostale skupine in naprave doseže prek nje. Če na lokaciji Master zamenja druga enota, integracija to zazna in po dveh zaporednih oglasih nove enote samodejno preklopi nanjo (preveri, da odgovarja; novi IP/MAC se shrani v vnos). Če nova enota ne odgovori, ostane stari cilj in preklop se ponovi po ~60 s. Rekonfiguracija ni potrebna.
 - **Odkrivanje:** polja IP, MAC in ID lokacije lahko pustite prazna; integracija do ~8 s posluša oglase Masterja na UDP 1028. Če to ne uspe, jih vnesite ročno.
 - **Omrežje:** HA in enote morajo biti v istem podomrežju. Odkrivanje in push potrebujeta **broadcast** (UDP 1028), ki ga Docker v načinu `bridge` ne prepušča: tam uporabite `host` omrežje ali ročni vnos (push takrat ne deluje, osveževanje je periodično).
 - **Ena lokacija:** lokalno upravljanje je možno samo za eno lokacijo na Home Assistant (enota sprejema ukaze samo z izvornega vrat 1028, zato je možen en socket). Vrata 1028 ne sme uporabljati nobena druga aplikacija na istem računalniku.
@@ -94,13 +94,15 @@ Naprave so v i-Vent sistemu razdeljene na "Skupine" (kjer je lahko združenih ve
 | **Zadnja sprememba** | `sensor` | ⏱️ | `timestamp` | Diagnostika | Čas UTC zadnje spremembe delovnega načina. *Onemogočeno privzeto.* |
 | **Konec posebnega načina** | `sensor` | ⏳ | `timestamp` | Diagnostika | Kdaj preneha veljati trenutni Boost/Dremež. *Onemogočeno privzeto.* |
 | **Stanje naprave** | `binary_sensor` | ⚠️ | `problem` | Diagnostika | Zaznava napake (status_esp != 0), npr. čas za menjavo filtrov. |
+| **Najdi napravo** | `button` | 📍 | `identify` | Nastavitve | Enota zapiska (Beacon), da jo najdete. *Samo lokalno/kombinirano.* |
+| **Ponastavi opozorilo za filter** | `button` | 🧹 | - | Nastavitve | Pobriše opozorilo za filter (Action FilterCleaned). Pritisnite po čiščenju/menjavi filtra. *Samo lokalno/kombinirano.* |
 | **Povezljivost** | `binary_sensor` | 🌐 | `connectivity` | Diagnostika | Stanje oblak spletne povezave s to napravo. |
 | **Obratni tok** | `switch` | 🔄 | - | - | Preklopi izmenični ali reverzibilni tok zraka izmenjalnika. |
 | **Ime enote** | `text` | 🏷️ | - | Nastavitve | Preimenovanje naprave neposredno iz HA. |
 | **Premakni v skupino** | `select` | ➡️ | - | Nastavitve | Premakne fizično enoto iz trenutne v novo skupino. |
 | **Urnik** | `switch` | 📅 | - | Nastavitve | Omogoči upravljanje (on/off) posameznih sistemskih urnikov. |
 
-*(Opomba: Senzorji za pretekle in prihodnje časovne diagnoze so privzeto omogočeni med testiranjem, a jih kot nevsiljiv dejavnik lahko preprosto izklopite.)*
+*(Opomba: trije diagnostični senzorji (RSSI, zadnja sprememba, konec posebnega načina) so ob novi namestitvi privzeto onemogočeni; omogočite jih v nastavitvah entitete. Pri obstoječih namestitvah ostanejo takšni, kot so že registrirani.)*
 
 ---
 
@@ -163,6 +165,25 @@ action:
         - switch.dnevna_soba_led_lights
         - switch.dnevna_soba_buzzer
 ```
+
+---
+
+## Odstranitev integracije
+
+1. **Nastavitve → Naprave in storitve → i-Vent** → tri pike ob vnosu → **Izbriši**. Entitete, naprave in vnos HA odstrani sam.
+2. Ob odstranitvi vnosa se zapre tudi lokalni UDP vtičnik (vrata 1028 se sprostijo); drugih podatkov na disku integracija ne ustvarja.
+3. Če ste integracijo namestili prek HACS, jo nato odstranite še tam (HACS → i-Vent → Odstrani) in znova zaženite Home Assistant.
+4. API ključ lahko na portalu i-Vent prekličete, če ga ne uporabljate več. Za lokalni način ni ključa, poverilnica je ID lokacije, ki ga ni mogoče preklicati.
+
+---
+
+## Zastarele naprave
+
+Če strežnik skupine, naprave ali urnika ne vrne več (npr. skupino izbrišete v aplikaciji), ostane v Home Assistantu kot **nedosegljiva** (sive entitete) in je integracija ne briše sama, da avtomatizacije in prilagoditve (imena, območja) ne izginejo zaradi izpada. Takšno napravo odstranite ročno: *stran naprave → ⋮ → Izbriši napravo*. Naprav, ki so še aktivne, odstraniti ni mogoče.
+
+V nastavitvah vnosa lahko vklopite **samodejno odstranjevanje** (privzeto izklopljeno): element se odstrani po 3 zaporednih uspešnih osvežitvah brez njega (v oblaku ~3 min); prazen odgovor ali neuspela osvežitev nikoli ne briše ničesar. Opozorilo: odstranitev zbriše tudi entitete, zato skupina, ki se pozneje vrne, dobi nove entitete (z novimi nastavitvami) in avtomatizacije nanje je treba preveriti. Če se odstranjeni element vrne, se integracija sama ponovno naloži.
+
+Pri preklopu v *Samo lokalno* stikala urnikov ostanejo nedosegljiva, dokler jih ne izbrišete ročno (ali vklopite samodejnega odstranjevanja).
 
 ---
 
