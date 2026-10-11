@@ -81,7 +81,12 @@ Vsakič: število in `entity_id`-ji entitet ostanejo isti (brez podvojenih entit
 
 - [ ] **Premik naprave v drugo skupino** (`group_id` v `ModifyDevice`, kodiran kot fixed32; ni preizkušen): poskusi z eno napravo; če naprava vrne napako, zapiši `ErrorCode` iz dnevnika. Vrni napravo v prvotno skupino (v uradni aplikaciji, če HA ne uspe).
 - [ ] Brisanje skupine lokalno (`delete`): ne preizkušaj na skupini, ki jo potrebuješ; najprej ustvari preizkusno skupino prek oblaka.
-- [ ] "Najdi napravo" (Beacon) še nima entitete v integraciji.
+- [ ] **Ponastavi opozorilo za filter** (`FilterCleaned`; preizkušeno na pravi napravi, deluje): pritisni le, ko je filter res očiščen/zamenjan, najbolje na enoti, ki alarm že kaže. Preveri: alarm (`Stanje naprave`) po ~2–5 s izgine tudi v uradni aplikaciji. Če naprava vrne napako, zapiši `ErrorCode` iz dnevnika.
+
+## 7b. Gumba in zamenjava Masterja
+
+- [ ] **Najdi napravo**: gumb na posamezni enoti jo zapiska; deluje na vseh enotah. Na Master enoti gre ukaz neposredno (forward=0), ker Master ukaza prek samega sebe ne izvede; to je treba potrditi (pisk). Enako velja za ponastavitev filtra na Masterju. V načinu *samo oblak* gumba ni.
+- [ ] **Samodejni preklop Masterja** (po možnosti brez izpada): ko Master zamenja druga enota, se v ~10 s v dnevniku pojavi `Preklopil na novega Location Masterja …`, vnos ima nov IP/MAC, rekonfiguracija ni potrebna. Če nova enota ne odgovarja: opozorilo `preklop ni uspel`, delovanje ostane na starem cilju.
 
 ## 8. Če kaj odpove: kaj zbrati
 
