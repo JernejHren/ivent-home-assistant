@@ -1,5 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, patch
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.update_coordinator import UpdateFailed
@@ -13,8 +14,7 @@ async def test_partial_failure_schedules(hass: HomeAssistant, mock_config_entry,
     await hass.async_block_till_done()
     
     # Verify initial state: schedules exist
-    entry_data = hass.data[DOMAIN][mock_config_entry.entry_id]
-    coordinator = entry_data["coordinator"]
+    coordinator = mock_config_entry.runtime_data.coordinator
     assert len(coordinator.data.raw_schedules) > 0
     assert hass.states.get("fan.dnevna_soba_fan").state == "on"
     
@@ -38,4 +38,5 @@ async def test_critical_failure_info(hass: HomeAssistant, mock_config_entry, moc
     await hass.config_entries.async_setup(mock_config_entry.entry_id)
     await hass.async_block_till_done()
     
-    assert mock_config_entry.entry_id not in hass.data[DOMAIN]
+    assert mock_config_entry.state is ConfigEntryState.SETUP_RETRY
+    assert not hasattr(mock_config_entry, "runtime_data")

@@ -87,7 +87,7 @@ async def test_select_optimistic_update(hass: HomeAssistant, mock_config_entry, 
     await hass.async_block_till_done()
 
     speed_entity = "select.dnevna_soba_speed"
-    coordinator = hass.data[DOMAIN][mock_config_entry.entry_id]["coordinator"]
+    coordinator = mock_config_entry.runtime_data.coordinator
     import copy
     original_remotes = {
         gid: copy.deepcopy(g.raw["remote"]) for gid, g in coordinator.data.groups_by_id.items()

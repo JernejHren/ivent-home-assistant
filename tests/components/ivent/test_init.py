@@ -1,5 +1,6 @@
 # tests/components/ivent/test_init.py
 from unittest.mock import AsyncMock, patch
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from custom_components.ivent.const import DOMAIN
 
@@ -7,14 +8,16 @@ async def test_setup_entry(hass: HomeAssistant, mock_config_entry, mock_api_clie
     """Test setup of the config entry."""
     assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
     await hass.async_block_till_done()
-    assert mock_config_entry.entry_id in hass.data[DOMAIN]
+    assert mock_config_entry.state is ConfigEntryState.LOADED
+    assert mock_config_entry.runtime_data.coordinator is not None
 
 async def test_unload_entry(hass: HomeAssistant, mock_config_entry, mock_api_client):
     """Test unloading of the config entry."""
     await hass.config_entries.async_setup(mock_config_entry.entry_id)
     await hass.async_block_till_done()
     assert await hass.config_entries.async_unload(mock_config_entry.entry_id)
-    assert mock_config_entry.entry_id not in hass.data[DOMAIN]
+    assert mock_config_entry.state is ConfigEntryState.NOT_LOADED
+    assert not hass.services.has_service(DOMAIN, "create_group")
 
 async def test_services_registered(hass: HomeAssistant, mock_config_entry, mock_api_client):
     """Test that custom services are registered upon setup."""

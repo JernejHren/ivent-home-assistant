@@ -77,8 +77,7 @@ async def test_device_rename_updates_registry(hass: HomeAssistant, mock_config_e
     mock_api_client.async_get_info.return_value = new_data
 
     # Refresh coordinator
-    entry_data = hass.data[DOMAIN][mock_config_entry.entry_id]
-    coordinator = entry_data["coordinator"]
+    coordinator = mock_config_entry.runtime_data.coordinator
     await coordinator.async_refresh()
     await hass.async_block_till_done()
 
@@ -118,8 +117,7 @@ async def test_entity_reappearance(hass: HomeAssistant, mock_config_entry, mock_
     assert len(fan_entries_before) == 1
     fan_entity_id = fan_entries_before[0].entity_id
 
-    entry_data = hass.data[DOMAIN][mock_config_entry.entry_id]
-    coordinator = entry_data["coordinator"]
+    coordinator = mock_config_entry.runtime_data.coordinator
 
     # Trigger disappearance: return empty groups
     empty_data = copy.deepcopy(MOCK_INFO_DATA)
@@ -172,8 +170,7 @@ async def test_coordinator_recovery(hass: HomeAssistant, mock_config_entry, mock
     # API goes down
     mock_api_client.async_get_info.side_effect = IVentApiClientError("API Down")
     
-    entry_data = hass.data[DOMAIN][mock_config_entry.entry_id]
-    coordinator = entry_data["coordinator"]
+    coordinator = mock_config_entry.runtime_data.coordinator
     await coordinator.async_refresh()
     await hass.async_block_till_done()
 
@@ -197,8 +194,7 @@ async def test_delayed_refresh(hass: HomeAssistant, mock_config_entry, mock_api_
     await hass.config_entries.async_setup(mock_config_entry.entry_id)
     await hass.async_block_till_done()
 
-    entry_data = hass.data[DOMAIN][mock_config_entry.entry_id]
-    coordinator = entry_data["coordinator"]
+    coordinator = mock_config_entry.runtime_data.coordinator
 
     # Reset call count
     mock_api_client.async_get_info.reset_mock()
@@ -232,8 +228,7 @@ async def test_delayed_refresh_debounce(hass: HomeAssistant, mock_config_entry, 
     await hass.config_entries.async_setup(mock_config_entry.entry_id)
     await hass.async_block_till_done()
 
-    entry_data = hass.data[DOMAIN][mock_config_entry.entry_id]
-    coordinator = entry_data["coordinator"]
+    coordinator = mock_config_entry.runtime_data.coordinator
 
     # Patch async_request_refresh on the coordinator instance so we can count
     # invocations without hitting the real API.
@@ -283,8 +278,7 @@ async def test_entity_reappearance_no_duplicate(hass: HomeAssistant, mock_config
     empty_data["groups"] = []
     mock_api_client.async_get_info.return_value = empty_data
 
-    entry_data = hass.data[DOMAIN][mock_config_entry.entry_id]
-    coordinator = entry_data["coordinator"]
+    coordinator = mock_config_entry.runtime_data.coordinator
     await coordinator.async_refresh()
     await hass.async_block_till_done()
 

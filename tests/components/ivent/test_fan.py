@@ -129,7 +129,7 @@ async def test_fan_optimistic_update(hass, mock_config_entry, mock_api_client):
     # Original state is on, percentage might be 33
     fan_id = "fan.dnevna_soba_fan"
     
-    coordinator = hass.data[DOMAIN][mock_config_entry.entry_id]["coordinator"]
+    coordinator = mock_config_entry.runtime_data.coordinator
     import copy
     original_remotes = {
         gid: copy.deepcopy(g.raw["remote"]) for gid, g in coordinator.data.groups_by_id.items()

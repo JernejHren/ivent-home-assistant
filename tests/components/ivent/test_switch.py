@@ -122,7 +122,7 @@ async def test_optimistic_state_ignores_stale_data(hass: HomeAssistant, mock_con
     # Mock the coordinator fetching old stale data (where LED is still ON)
     # and trigger an update, simulating read-after-write inconsistency
     from custom_components.ivent.const import DOMAIN
-    coordinator = hass.data[DOMAIN][mock_config_entry.entry_id]["coordinator"]
+    coordinator = mock_config_entry.runtime_data.coordinator
     
     # Patch only optimistic timer usage from integration, not global asyncio time.
     with patch("custom_components.ivent.entity.monotonic", return_value=time.monotonic() + 0.5):
