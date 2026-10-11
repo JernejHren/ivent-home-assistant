@@ -3,13 +3,12 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass, BinarySensorEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import EntityCategory
+from homeassistant.const import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
-from .coordinator import IVentCoordinator, IVentDeviceData
+from .coordinator import IVentConfigEntry, IVentCoordinator, IVentDeviceData
 from .entity import IVentDeviceEntity
 
 PARALLEL_UPDATES = 1
@@ -40,12 +39,11 @@ def _active_status_flags(device: IVentDeviceData) -> int:
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: IVentConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Nastavi binary_sensor entitete iz konfiguracijskega vnosa."""
-    data = hass.data[DOMAIN][entry.entry_id]
-    coordinator: IVentCoordinator = data["coordinator"]
+    coordinator: IVentCoordinator = entry.runtime_data.coordinator
 
     added_entities: set[str] = set()
 

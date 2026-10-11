@@ -138,6 +138,12 @@
     "button": {
       "delete_group": {
         "name": "Delete group"
+      },
+      "beacon": {
+        "name": "Find device"
+      },
+      "filter_reset": {
+        "name": "Reset filter alarm"
       }
     },
     "select": {
@@ -157,15 +163,61 @@
       "init": {
         "title": "i-Vent options",
         "data": {
+          "auto_remove_stale": "Automatically remove groups, devices and schedules the server no longer reports",
           "info_fallback": "State from cloud when the Master is unreachable"
         },
         "data_description": {
-          "info_fallback": "When the local connection drops, state is read from the cloud. Off: entities become unavailable."
+          "auto_remove_stale": "Off (default): such items stay as unavailable and you delete them by hand on the device page. On: they are removed after 3 consecutive updates without them; their entities are deleted too, so a group that comes back gets new entities and loses renames, areas and customisations.",
+          "info_fallback": "Combined mode only. When the local connection drops, state is read from the cloud. Off: entities become unavailable."
         }
       }
     },
     "abort": {
       "no_options": "This mode has no options."
+    }
+  },
+  "exceptions": {
+    "group_name_empty": {
+      "message": "Group name must not be empty"
+    },
+    "group_id_missing": {
+      "message": "Group ID is missing"
+    },
+    "new_group_name_empty": {
+      "message": "The new group name must not be empty"
+    },
+    "device_mac_missing": {
+      "message": "Device MAC address is missing"
+    },
+    "new_device_name_empty": {
+      "message": "The new device name must not be empty"
+    },
+    "target_group_missing": {
+      "message": "Target group is missing"
+    },
+    "create_group_failed": {
+      "message": "Failed to create group: {error}"
+    },
+    "delete_group_failed": {
+      "message": "Failed to delete group: {error}"
+    },
+    "rename_group_failed": {
+      "message": "Failed to rename group: {error}"
+    },
+    "rename_device_failed": {
+      "message": "Failed to rename device: {error}"
+    },
+    "move_device_failed": {
+      "message": "Failed to move device: {error}"
+    },
+    "group_data_missing": {
+      "message": "Cannot prepare the command: group data is missing"
+    },
+    "action_failed": {
+      "message": "The device command failed: {error}"
+    },
+    "action_unsupported": {
+      "message": "This mode does not support device commands"
     }
   }
 }

@@ -5,14 +5,13 @@ from datetime import datetime, timezone
 from typing import Any
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import SIGNAL_STRENGTH_DECIBELS_MILLIWATT
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity import EntityCategory
+from homeassistant.const import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
-from .coordinator import IVentCoordinator, IVentDeviceData, IVentGroupData
+from .coordinator import IVentConfigEntry, IVentCoordinator, IVentDeviceData, IVentGroupData
 from .entity import IVentGroupEntity, IVentDeviceEntity
 
 PARALLEL_UPDATES = 1
@@ -20,12 +19,11 @@ PARALLEL_UPDATES = 1
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: IVentConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Nastavi senzor entitete iz konfiguracijskega vnosa."""
-    data = hass.data[DOMAIN][entry.entry_id]
-    coordinator: IVentCoordinator = data["coordinator"]
+    coordinator: IVentCoordinator = entry.runtime_data.coordinator
 
     added_entities: set[str] = set()
 
@@ -72,6 +70,7 @@ class IVentRssiSensor(IVentDeviceEntity, SensorEntity):
     """
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
     _attr_device_class = SensorDeviceClass.SIGNAL_STRENGTH
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = SIGNAL_STRENGTH_DECIBELS_MILLIWATT
@@ -97,6 +96,8 @@ class IVentTimestampSensor(IVentGroupEntity, SensorEntity):
     unique_id: {entry_id}_{group_id}_{key}  (stable — group_id is immutable API int)
     """
 
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
     _attr_device_class = SensorDeviceClass.TIMESTAMP
 
     def __init__(

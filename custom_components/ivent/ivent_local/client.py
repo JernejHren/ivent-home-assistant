@@ -37,6 +37,30 @@ class IVentLocalClient:
         self._devices: Dict[str, Dict[str, Any]] = {}
         self._recent: Deque[Tuple[Any, ...]] = deque(maxlen=128)
 
+    # -- Master ---------------------------------------------------------------
+    @property
+    def master(self) -> Tuple[str, int]:
+        """Trenutni cilj za zahtevke skupin: (IP, MAC kot int)."""
+        return self._master_host, self._master_mac
+
+    def set_master(self, host: str, mac: int | str) -> None:
+        """Preusmeri zahtevke na drugega Masterja (po menjavi Masterja na lokaciji)."""
+        self._master_host = host
+        self._master_mac = cv.mac_from_str(mac) if isinstance(mac, str) else mac
+
+    async def async_probe_master(self, host: str, mac: int | str) -> int:
+        """Preveri, ali kandidat odgovori kot Master, ne da bi spremenil trenutni cilj."""
+        dest = cv.mac_from_str(mac) if isinstance(mac, str) else mac
+        packet = await self._call(
+            host, dest,
+            lambda h, m: p.build_simple(h, m, c.T_MASTER_PING, c.F_PING[0]),
+            c.T_MASTER_PING | c.RESPONSE_FLAG)
+        res = get(packet.body, c.F_PING[1])
+        if res is None:
+            raise IVentLocalProtocolError(f"v odgovoru ni polja {c.F_PING[1]}")
+        hash_: int = get(parse_fields(res), 1, 0)
+        return hash_
+
     # -- osnovni klic -------------------------------------------------------
     async def _call(self, host: str, dest_mac: int, build: Callable[[p.Header, int], bytes],
                     expect: int, *, forward: int = 0) -> p.Packet:
@@ -141,11 +165,25 @@ class IVentLocalClient:
                 _LOGGER.debug("Naprava %s ni odgovorila neposredno, poskušam prek Masterja", device_mac)
         await self._call(self._master_host, mac_int, build, c.T_RESPONSE_EMPTY, forward=1)
 
+    async def _action(self, device_mac: str, action: int) -> None:
+        """Action na enoto. Običajno prek Masterja (forward=1, kot uradna appka).
+
+        Master na forward=1 s samim seboj kot ciljem ne odgovori in ne izvede ukaza
+        (potrjeno na pravi napravi), zato se mu ukaz pošlje neposredno (forward=0).
+        """
+        mac_int = cv.mac_from_str(device_mac)
+        forward = 0 if mac_int == self._master_mac else 1
+        await self._call(self._master_host, mac_int,
+                         lambda h, m: p.build_action(h, m, action),
+                         c.T_RESPONSE_EMPTY, forward=forward)
+
     async def async_beacon(self, device_mac: str) -> None:
-        """"Najdi napravo": naprava zapiska. Kot uradna appka: prek Masterja, forward=1."""
-        await self._call(self._master_host, cv.mac_from_str(device_mac),
-                         lambda h, m: p.build_action(h, m, c.ACTION_BEACON),
-                         c.T_RESPONSE_EMPTY, forward=1)
+        """"Najdi napravo": naprava zapiska."""
+        await self._action(device_mac, c.ACTION_BEACON)
+
+    async def async_filter_cleaned(self, device_mac: str) -> None:
+        """Ponastavi opozorilo za filter (ActionType.FilterCleaned)."""
+        await self._action(device_mac, c.ACTION_FILTER_CLEANED)
 
     async def async_get_schedules(self) -> List[Any]:
         raise IVentLocalUnsupported("urniki lokalno še niso podprti")

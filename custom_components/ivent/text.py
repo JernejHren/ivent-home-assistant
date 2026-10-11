@@ -3,13 +3,12 @@ from __future__ import annotations
 
 import time
 from homeassistant.components.text import TextEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import EntityCategory
+from homeassistant.const import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
-from .coordinator import IVentCoordinator, IVentGroupData, IVentDeviceData
+from .coordinator import IVentConfigEntry, IVentCoordinator, IVentGroupData, IVentDeviceData
 from .entity import IVentGroupEntity, IVentDeviceEntity
 
 PARALLEL_UPDATES = 1
@@ -17,12 +16,11 @@ PARALLEL_UPDATES = 1
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: IVentConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Nastavi text entitete iz konfiguracijskega vnosa."""
-    data = hass.data[DOMAIN][entry.entry_id]
-    coordinator: IVentCoordinator = data["coordinator"]
+    coordinator: IVentCoordinator = entry.runtime_data.coordinator
 
     added_entities: set[str] = set()
 
@@ -60,7 +58,6 @@ class IVentGroupNameText(IVentGroupEntity, TextEntity):
     """
 
     _attr_entity_category = EntityCategory.CONFIG
-    _attr_icon = "mdi:rename-box"
 
     def __init__(self, coordinator: IVentCoordinator, group_data: IVentGroupData) -> None:
         super().__init__(coordinator, group_data)
@@ -84,7 +81,6 @@ class IVentDeviceNameText(IVentDeviceEntity, TextEntity):
     """
 
     _attr_entity_category = EntityCategory.CONFIG
-    _attr_icon = "mdi:rename-box"
 
     def __init__(self, coordinator: IVentCoordinator, device_data: IVentDeviceData) -> None:
         super().__init__(coordinator, device_data)

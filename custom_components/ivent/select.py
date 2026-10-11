@@ -2,13 +2,12 @@
 from __future__ import annotations
 
 from homeassistant.components.select import SelectEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity import EntityCategory
+from homeassistant.const import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
-from .coordinator import IVentCoordinator, IVentGroupData, IVentDeviceData
+from .coordinator import IVentConfigEntry, IVentCoordinator, IVentGroupData, IVentDeviceData
 from .entity import IVentGroupEntity, IVentDeviceEntity
 
 # --- Ventilation mode maps ---
@@ -28,12 +27,11 @@ PARALLEL_UPDATES = 1
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: IVentConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Nastavi select entitete iz konfiguracijskega vnosa."""
-    data = hass.data[DOMAIN][entry.entry_id]
-    coordinator: IVentCoordinator = data["coordinator"]
+    coordinator: IVentCoordinator = entry.runtime_data.coordinator
 
     added_entities: set[str] = set()
 
@@ -115,7 +113,6 @@ class IVentSpeedSelect(IVentGroupEntity, SelectEntity):
     """Predstavlja izbirnik za hitrost ventilatorja."""
 
     _attr_entity_category = EntityCategory.CONFIG
-    _attr_icon = "mdi:fan-speed-2"
 
     def __init__(self, coordinator: IVentCoordinator, group_data: IVentGroupData) -> None:
         super().__init__(coordinator, group_data)
@@ -161,7 +158,6 @@ class IVentMoveDeviceSelect(IVentDeviceEntity, SelectEntity):
     """
 
     _attr_entity_category = EntityCategory.CONFIG
-    _attr_icon = "mdi:arrow-right-bold-box-outline"
 
     def __init__(
         self,

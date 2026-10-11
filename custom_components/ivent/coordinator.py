@@ -4,29 +4,46 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass, field
+from functools import partial
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Any
+from time import monotonic
+from typing import Callable, Dict, List, Any, Optional, Tuple, TypeAlias
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import (
-    IVentApiClient,
     IVentApiAuthError,
     IVentApiConnectionError,
     IVentApiClientError,
+    IVentApiUnsupportedError,
     IVentGroup,
     IVentDevice,
     IVentScheduleGroup,
     IVentRemote,
     IVentScheduleItem,
 )
+from .backend import IVentBackend, IVentMasterBackend, IVentPushBackend
+from .const import CONF_LOCAL_HOST, CONF_LOCAL_MAC, DOMAIN, OPT_AUTO_REMOVE_STALE
 
 _LOGGER = logging.getLogger(__name__)
 
 SCAN_INTERVAL = timedelta(seconds=60)
+# Ko push deluje (Master redno oglaša na broadcastu), je polling le varnostna mreža
+# (rssi/alive/statusEsp, izgubljen paket).
+SCAN_INTERVAL_PUSH = timedelta(seconds=120)
+# Push štejemo za delujoč, če smo MasterAdvertise (~5 s) videli v tem času.
+PUSH_FRESH_SECONDS = 30.0
+# Skupino/napravo/urnik odstranimo iz registrov šele, ko ga ni v tolikih zaporednih
+# uspešnih osvežitvah (kratek izpad ali nepopoln odgovor ne sme brisati entitet).
+STALE_AFTER_UPDATES = 3
+# Na novega Masterja preklopimo šele, ko ga vidimo v toliko zaporednih oglasih (~5 s narazen).
+MASTER_SWITCH_AFTER_ADVERTS = 2
+# Po neuspelem preklopu počakamo, preden poskusimo znova.
+MASTER_SWITCH_RETRY_SECONDS = 60.0
 
 
 # ---------------------------------------------------------------------------
@@ -194,10 +211,12 @@ class IVentData:
 class IVentCoordinator(DataUpdateCoordinator[IVentData]):
     """Manages a single periodic fetch and exposes normalized IVentData."""
 
+    config_entry: IVentConfigEntry
+
     def __init__(
         self,
         hass: HomeAssistant,
-        client: IVentApiClient,
+        client: IVentBackend,
         entry: ConfigEntry,
     ) -> None:
         super().__init__(
@@ -208,7 +227,133 @@ class IVentCoordinator(DataUpdateCoordinator[IVentData]):
         )
         self.client = client
         self.config_entry = entry
-        self._pending_refresh_task: asyncio.Task | None = None
+        self._pending_refresh_task: asyncio.Task[None] | None = None
+        self._push_unsub: Optional[Callable[[], None]] = None
+        self._last_advert: Optional[float] = None
+        self.master_info: Optional[Dict[str, Any]] = None
+        # zaporedne osvežitve, v katerih registrirane skupine/naprave/urnika ni bilo v podatkih
+        self._missing: Dict[Tuple[str, Any], int] = {}
+        # ključi, ki smo jih odstranili iz registrov (za zaznavo ponovnega pojava)
+        self._removed: set[Tuple[str, Any]] = set()
+        # sledenje menjavi Masterja
+        self._master_candidate: Optional[Tuple[str, str]] = None
+        self._master_candidate_seen = 0
+        self._master_switching = False
+        self._master_retry_at = 0.0
+
+    # ------------------------------------------------------------------
+    # Push (lokalni broadcast)
+    # ------------------------------------------------------------------
+
+    @property
+    def push_active(self) -> bool:
+        """True, če smo nedavno videli oglas Masterja (broadcast do nas res pride)."""
+        return (
+            self._last_advert is not None
+            and monotonic() - self._last_advert < PUSH_FRESH_SECONDS
+        )
+
+    def _apply_push_interval(self) -> None:
+        interval = SCAN_INTERVAL_PUSH if self.push_active else SCAN_INTERVAL
+        if interval != self.update_interval:
+            _LOGGER.debug("Poll interval %s -> %s (push active: %s)",
+                          self.update_interval, interval, self.push_active)
+        self.update_interval = interval
+
+    async def async_start_push(self) -> bool:
+        """Zažene push, če ga backend podpira. Vrne True, če je naročen."""
+        client = self.client
+        if not isinstance(client, IVentPushBackend):
+            return False
+        try:
+            await client.async_start()
+        except OSError as err:
+            raise ConfigEntryNotReady(f"Cannot open local UDP socket: {err}") from err
+        self._push_unsub = client.start_push(self._on_push_remote, self._on_push_master)
+        _LOGGER.info("Listening for local i-Vent push messages (UDP broadcast)")
+        return True
+
+    async def async_stop_push(self) -> None:
+        if self._push_unsub is not None:
+            self._push_unsub()
+            self._push_unsub = None
+        if isinstance(self.client, IVentPushBackend):
+            await self.client.async_stop()
+
+    def _on_push_remote(self, group_id: int, remote: Dict[str, Any]) -> None:
+        """Stanje skupine je prišlo kot push (tip 6): posodobi brez poizvedbe."""
+        _LOGGER.debug("Push: group %s -> %s speed %s special %s", group_id,
+                      remote.get("work_mode"), remote.get("remote_control_speed"),
+                      remote.get("special_mode"))
+        if self.data is None:
+            return
+        group = self.data.groups_by_id.get(group_id)
+        if group is None:
+            # neznana skupina (nova/izbrisana): potrebna je polna osvežitev
+            self.hass.async_create_task(self.async_request_refresh())
+            return
+        group.raw["remote"].update(remote)  # type: ignore[typeddict-item]
+        self.async_set_updated_data(self.data)
+
+    def _on_push_master(self, info: Dict[str, Any]) -> None:
+        """MasterAdvertise (tip 2): oglas ali sprememba Masterja."""
+        previous = self.master_info
+        if previous is None:
+            _LOGGER.debug("Master advert received: %s", info)
+        self._last_advert = monotonic()
+        self.master_info = info
+        self._apply_push_interval()
+        if previous is not None and (
+            previous.get("ip") != info.get("ip")
+            or previous.get("mac") != info.get("mac")
+            or previous.get("became_master") != info.get("became_master")
+        ):
+            _LOGGER.info("Location Master se je spremenil: %s -> %s", previous, info)
+            self.hass.async_create_task(self.async_request_refresh())
+        self._maybe_follow_master(info)
+
+    def _maybe_follow_master(self, info: Dict[str, Any]) -> None:
+        """Če oglas pove, da je Master zdaj druga enota, preklopi nanjo (po 2 zaporednih oglasih)."""
+        client = self.client
+        if not isinstance(client, IVentMasterBackend):
+            return
+        host, mac = client.master_address
+        ip, new_mac = info.get("ip"), str(info.get("mac", "")).lower()
+        if not ip or not new_mac or (ip == host and new_mac == mac.lower()):
+            self._master_candidate, self._master_candidate_seen = None, 0
+            return
+        candidate = (ip, new_mac)
+        if candidate != self._master_candidate:
+            self._master_candidate, self._master_candidate_seen = candidate, 1
+        else:
+            self._master_candidate_seen += 1
+        if (self._master_candidate_seen < MASTER_SWITCH_AFTER_ADVERTS
+                or self._master_switching or monotonic() < self._master_retry_at):
+            return
+        self._master_switching = True
+        self.hass.async_create_task(self._async_follow_master(*candidate))
+
+    async def _async_follow_master(self, ip: str, mac: str) -> None:
+        client = self.client
+        assert isinstance(client, IVentMasterBackend)
+        old_host, old_mac = client.master_address
+        try:
+            await client.async_switch_master(ip, mac)
+        except IVentApiClientError as err:
+            self._master_retry_at = monotonic() + MASTER_SWITCH_RETRY_SECONDS
+            _LOGGER.warning("Location Master je zdaj %s (%s), preklop ni uspel (%s); ostajam na %s",
+                            ip, mac, err, old_host)
+        else:
+            self.hass.config_entries.async_update_entry(
+                self.config_entry,
+                data={**self.config_entry.data, CONF_LOCAL_HOST: ip, CONF_LOCAL_MAC: mac},
+            )
+            _LOGGER.info("Preklopil na novega Location Masterja %s (%s) namesto %s (%s)",
+                         ip, mac, old_host, old_mac)
+            await self.async_request_refresh()
+        finally:
+            self._master_switching = False
+            self._master_candidate, self._master_candidate_seen = None, 0
 
     async def async_request_delayed_refresh(self, delay: float = 2.0) -> None:
         """Zahteva osvežitev podatkov s kratkim zamikom.
@@ -262,6 +407,10 @@ class IVentCoordinator(DataUpdateCoordinator[IVentData]):
         raw_schedules: List[IVentScheduleGroup]
         try:
             raw_schedules = await self.client.async_get_schedules()
+        except IVentApiUnsupportedError:
+            # Backend urnikov ne podpira (lokalni način brez oblaka): to ni napaka.
+            _LOGGER.debug("Schedules are not supported by this backend")
+            raw_schedules = []
         except IVentApiAuthError as err:
             raise ConfigEntryAuthFailed(
                 f"Authentication error fetching schedules: {err}"
@@ -279,7 +428,88 @@ class IVentCoordinator(DataUpdateCoordinator[IVentData]):
                 self.data.raw_schedules if self.data is not None else []
             )
 
-        return _normalize(info.get("groups", []), raw_schedules)
+        self._apply_push_interval()
+        data = _normalize(info.get("groups", []), raw_schedules)
+        self._prune_stale(data)
+        return data
+
+    # ------------------------------------------------------------------
+    # Odstranjevanje zastarelih naprav (stale-devices)
+    # ------------------------------------------------------------------
+
+    def _registered_keys(self) -> Dict[Tuple[str, Any], Callable[[], None]]:
+        """Skupine, naprave in urniki tega vnosa, ki so v registrih, z odstranjevalnikom."""
+        entry_id = self.config_entry.entry_id
+        prefix = f"{entry_id}_"
+        found: Dict[Tuple[str, Any], Callable[[], None]] = {}
+
+        dev_reg = dr.async_get(self.hass)
+        for dev in dr.async_entries_for_config_entry(dev_reg, entry_id):
+            for domain, ident in dev.identifiers:
+                if domain != DOMAIN or ident == entry_id:
+                    continue  # servisna naprava "i-Vent System" ostane vedno
+                if ident.startswith(prefix):
+                    rest = ident[len(prefix):]
+                    if not rest.isdigit():
+                        continue
+                    key: Tuple[str, Any] = ("group", int(rest))
+                else:
+                    key = ("device", ident)
+                found[key] = partial(self._remove_device, dev.id)
+
+        ent_reg = er.async_get(self.hass)
+        sched_prefix = f"{entry_id}_schedule_"
+        for ent in er.async_entries_for_config_entry(ent_reg, entry_id):
+            uid = ent.unique_id or ""
+            if ent.domain == "switch" and uid.startswith(sched_prefix) \
+                    and uid[len(sched_prefix):].isdigit():
+                found[("schedule", int(uid[len(sched_prefix):]))] = partial(
+                    ent_reg.async_remove, ent.entity_id)
+        return found
+
+    def _remove_device(self, device_id: str) -> None:
+        dr.async_get(self.hass).async_remove_device(device_id)
+
+    def _prune_stale(self, data: IVentData) -> None:
+        """Odstrani iz registrov skupine, naprave in urnike, ki jih strežnik ne vrača več."""
+        if not self.config_entry.options.get(OPT_AUTO_REMOVE_STALE, False):
+            self._missing.clear()
+            return  # privzeto samo ročno (async_remove_config_entry_device)
+        if not data.group_ids:
+            return  # prazen odgovor ni dokaz, da so vse skupine izginile
+
+        present: set[Tuple[str, Any]] = (
+            {("group", g) for g in data.group_ids}
+            | {("device", m) for m in data.devices_by_mac}
+            | {("schedule", i) for i in data.schedules_by_id}
+        )
+        if self._removed & present:
+            # odstranjeno je spet tu: entitete za novi pojav ustvari šele ponovna naložitev
+            self._removed -= present
+            _LOGGER.info("Previously removed i-Vent items reappeared, reloading integration")
+            self._schedule_reload()
+
+        registered = self._registered_keys()
+        stale = {k for k in registered if k not in present}
+        self._missing = {k: n for k, n in self._missing.items() if k in stale}
+        for key in sorted(stale, key=str):
+            count = self._missing.get(key, 0) + 1
+            if count < STALE_AFTER_UPDATES:
+                self._missing[key] = count
+                continue
+            _LOGGER.info("Removing stale i-Vent %s %s (not reported for %s updates)",
+                         key[0], key[1], count)
+            registered[key]()
+            self._missing.pop(key, None)
+            self._removed.add(key)
+
+    def _schedule_reload(self) -> None:
+        schedule = getattr(self.hass.config_entries, "async_schedule_reload", None)
+        if schedule is not None:
+            schedule(self.config_entry.entry_id)
+        else:  # pragma: no cover - starejši HA
+            self.hass.async_create_task(
+                self.hass.config_entries.async_reload(self.config_entry.entry_id))
 
 
 # ---------------------------------------------------------------------------
@@ -337,3 +567,16 @@ def _normalize(
         all_device_macs=all_device_macs,
         raw_schedules=raw_schedules,
     )
+
+
+@dataclass
+class IVentRuntimeData:
+    """Podatki, ki živijo toliko kot naložen konfiguracijski vnos (entry.runtime_data)."""
+
+    coordinator: IVentCoordinator
+    client: IVentBackend
+    # nastavitve ob zagonu: za primerjavo v update listenerju (starejši HA)
+    options: Dict[str, Any] = field(default_factory=dict)
+
+
+IVentConfigEntry: TypeAlias = "ConfigEntry[IVentRuntimeData]"

@@ -5,9 +5,8 @@ import time
 from typing import Any
 
 from homeassistant.components.switch import SwitchEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import EntityCategory
+from homeassistant.const import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
@@ -18,7 +17,7 @@ from .const import (
     API_MODE_SNOOZE,
     API_MODE_BOOST,
 )
-from .coordinator import IVentCoordinator, IVentGroupData, IVentDeviceData
+from .coordinator import IVentConfigEntry, IVentCoordinator, IVentGroupData, IVentDeviceData
 from .entity import IVentGroupEntity, IVentDeviceEntity, IVentScheduleEntity
 from .api import IVentScheduleItem
 
@@ -27,12 +26,11 @@ PARALLEL_UPDATES = 1
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: IVentConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Nastavi switch entitete iz konfiguracijskega vnosa."""
-    data = hass.data[DOMAIN][entry.entry_id]
-    coordinator: IVentCoordinator = data["coordinator"]
+    coordinator: IVentCoordinator = entry.runtime_data.coordinator
 
     added_entities: set[str] = set()
 
@@ -63,12 +61,12 @@ async def async_setup_entry(
                 added_entities.add(uid_buzzer)
                 new_entities.append(IVentBuzzerSwitch(coordinator, group))
 
-            for api_mode, icon in [("night1", "mdi:weather-night"), ("night2", "mdi:weather-night"), ("snooze", "mdi:alarm-snooze"), ("boost", "mdi:rocket-launch")]:
+            for api_mode in ("night1", "night2", "snooze", "boost"):
                 uid_special = f"{entry_id}_{group.id}_{api_mode}"
                 if uid_special not in added_entities:
                     added_entities.add(uid_special)
                     api_mode_map = {"night1": API_MODE_NIGHT1, "night2": API_MODE_NIGHT2, "snooze": API_MODE_SNOOZE, "boost": API_MODE_BOOST}
-                    new_entities.append(IVentSpecialModeSwitch(coordinator, group, api_mode, api_mode_map[api_mode], icon))
+                    new_entities.append(IVentSpecialModeSwitch(coordinator, group, api_mode, api_mode_map[api_mode]))
 
         # Naprave
         for device in coordinator.data.devices_by_mac.values():
@@ -97,13 +95,11 @@ class IVentSpecialModeSwitch(IVentGroupEntity, SwitchEntity):
         group_data: IVentGroupData,
         translation_key: str,
         api_mode: str,
-        icon: str,
     ) -> None:
         super().__init__(coordinator, group_data)
         self._api_mode = api_mode
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{self._group_id}_{api_mode.lower()}"
         self._attr_translation_key = translation_key
-        self._attr_icon = icon
 
     @property
     def is_on(self) -> bool:
@@ -124,7 +120,6 @@ class IVentLedSwitch(IVentGroupEntity, SwitchEntity):
     """Stikalo za LED osvetlitev skupine."""
 
     _attr_entity_category = EntityCategory.CONFIG
-    _attr_icon = "mdi:led-on"
 
     def __init__(self, coordinator: IVentCoordinator, group_data: IVentGroupData) -> None:
         super().__init__(coordinator, group_data)
@@ -148,7 +143,6 @@ class IVentBuzzerSwitch(IVentGroupEntity, SwitchEntity):
     """Stikalo za zvočni signal skupine."""
 
     _attr_entity_category = EntityCategory.CONFIG
-    _attr_icon = "mdi:volume-high"
 
     def __init__(self, coordinator: IVentCoordinator, group_data: IVentGroupData) -> None:
         super().__init__(coordinator, group_data)
@@ -175,7 +169,6 @@ class IVentBuzzerSwitch(IVentGroupEntity, SwitchEntity):
 class IVentScheduleSwitch(IVentScheduleEntity, SwitchEntity):
     """Stikalo za vklop/izklop urnika."""
 
-    _attr_icon = "mdi:calendar-clock"
 
     def __init__(self, coordinator: IVentCoordinator, schedule_data: IVentScheduleItem) -> None:
         super().__init__(coordinator, schedule_data)
@@ -205,7 +198,6 @@ class IVentReverseFlowSwitch(IVentDeviceEntity, SwitchEntity):
     unique_id: {mac_address}_reverse_flow  (stable — MAC never changes)
     """
 
-    _attr_icon = "mdi:swap-horizontal-bold"
 
     def __init__(self, coordinator: IVentCoordinator, device_data: IVentDeviceData) -> None:
         super().__init__(coordinator, device_data)

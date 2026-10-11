@@ -138,6 +138,12 @@
     "button": {
       "delete_group": {
         "name": "Izbriši skupino"
+      },
+      "beacon": {
+        "name": "Najdi napravo"
+      },
+      "filter_reset": {
+        "name": "Ponastavi opozorilo za filter"
       }
     },
     "select": {
@@ -157,15 +163,61 @@
       "init": {
         "title": "i-Vent nastavitve",
         "data": {
+          "auto_remove_stale": "Samodejno odstrani skupine, naprave in urnike, ki jih strežnik ne vrača več",
           "info_fallback": "Stanje iz oblaka, ko Master ni dosegljiv"
         },
         "data_description": {
-          "info_fallback": "Ob izpadu lokalne povezave se stanje bere iz oblaka. Izklopljeno: entitete postanejo nedosegljive."
+          "auto_remove_stale": "Izklopljeno (privzeto): takšni elementi ostanejo kot nedosegljivi, izbrišete jih ročno na strani naprave. Vklopljeno: odstranijo se po 3 zaporednih osvežitvah brez njih; zbrišejo se tudi njihove entitete, zato skupina, ki se vrne, dobi nove entitete in izgubi preimenovanja, območja in prilagoditve.",
+          "info_fallback": "Samo kombinirani način. Ob izpadu lokalne povezave se stanje bere iz oblaka. Izklopljeno: entitete postanejo nedosegljive."
         }
       }
     },
     "abort": {
       "no_options": "Ta način delovanja nima nastavitev."
+    }
+  },
+  "exceptions": {
+    "group_name_empty": {
+      "message": "Ime skupine ne sme biti prazno"
+    },
+    "group_id_missing": {
+      "message": "Manjka ID skupine"
+    },
+    "new_group_name_empty": {
+      "message": "Novo ime skupine ne sme biti prazno"
+    },
+    "device_mac_missing": {
+      "message": "Manjka MAC naprave"
+    },
+    "new_device_name_empty": {
+      "message": "Novo ime naprave ne sme biti prazno"
+    },
+    "target_group_missing": {
+      "message": "Manjka ciljna skupina"
+    },
+    "create_group_failed": {
+      "message": "Napaka pri ustvarjanju skupine: {error}"
+    },
+    "delete_group_failed": {
+      "message": "Napaka pri brisanju skupine: {error}"
+    },
+    "rename_group_failed": {
+      "message": "Napaka pri preimenovanju skupine: {error}"
+    },
+    "rename_device_failed": {
+      "message": "Napaka pri preimenovanju naprave: {error}"
+    },
+    "move_device_failed": {
+      "message": "Napaka pri premikanju naprave: {error}"
+    },
+    "group_data_missing": {
+      "message": "Ukaza ni mogoče pripraviti: podatki skupine manjkajo"
+    },
+    "action_failed": {
+      "message": "Ukaz napravi ni uspel: {error}"
+    },
+    "action_unsupported": {
+      "message": "Ta način delovanja ne podpira ukazov napravi"
     }
   }
 }
