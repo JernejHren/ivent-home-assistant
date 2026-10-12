@@ -88,6 +88,14 @@
       },
       "special_mode_ends_at": {
         "name": "Special mode ends at"
+      },
+      "connection_mode": {
+        "name": "Connection mode",
+        "state": {
+          "cloud": "Cloud only",
+          "local": "Local only",
+          "hybrid": "Combined"
+        }
       }
     },
     "binary_sensor": {

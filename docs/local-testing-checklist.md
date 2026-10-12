@@ -58,6 +58,8 @@ Po vsakem koraku se vrni v prvotno stanje.
 
 ## 5. Preklapljanje načinov (Rekonfiguracija)
 
+- [ ] Senzor **Način povezave** na napravi "i-Vent System" pokaže pravi način in se po rekonfiguraciji spremeni.
+
 Vsakič: število in `entity_id`-ji entitet ostanejo isti (brez podvojenih entitet), `unique_id` se ne spremeni.
 
 - [ ] Oblak → Samo lokalno.

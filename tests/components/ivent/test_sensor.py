@@ -81,3 +81,12 @@ async def test_sensor_updates(hass: HomeAssistant, mock_config_entry, mock_api_c
     # Verify updated state
     rssi_state = hass.states.get("sensor.enota_1_signal")
     assert rssi_state.state == "-70"
+
+
+async def test_cloud_mode_sensor(hass, mock_config_entry, mock_api_client):
+    from homeassistant.helpers import entity_registry as er
+    await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+    ent = er.async_get(hass).async_get_entity_id(
+        "sensor", "ivent", f"{mock_config_entry.entry_id}_connection_mode")
+    assert ent and hass.states.get(ent).state == "cloud"

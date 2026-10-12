@@ -58,6 +58,16 @@
       "device_name": {
         "default": "mdi:rename-box"
       }
+    },
+    "sensor": {
+      "connection_mode": {
+        "default": "mdi:lan-connect",
+        "state": {
+          "cloud": "mdi:cloud",
+          "local": "mdi:lan",
+          "hybrid": "mdi:cloud-braces"
+        }
+      }
     }
   }
 }

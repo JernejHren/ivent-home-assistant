@@ -8,9 +8,10 @@ from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, Sen
 from homeassistant.const import SIGNAL_STRENGTH_DECIBELS_MILLIWATT
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.const import EntityCategory
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from .const import CONF_MODE, DOMAIN, MODE_CLOUD, MODE_HYBRID, MODE_LOCAL
 from .coordinator import IVentConfigEntry, IVentCoordinator, IVentDeviceData, IVentGroupData
 from .entity import IVentGroupEntity, IVentDeviceEntity
 
@@ -55,8 +56,38 @@ async def async_setup_entry(
         if new_entities:
             async_add_entities(new_entities)
 
+    async_add_entities([IVentConnectionModeSensor(entry)])
     _add_new_entities()
     entry.async_on_unload(coordinator.async_add_listener(_add_new_entities))
+
+
+# ---------------------------------------------------------------------------
+# Servisna naprava "i-Vent System": način povezave
+# ---------------------------------------------------------------------------
+
+class IVentConnectionModeSensor(SensorEntity):
+    """Kateri način povezave je nastavljen: samo oblak, samo lokalno ali kombinirano.
+
+    Vrednost se spremeni samo z rekonfiguracijo (ta ponovno naloži vnos), zato
+    entiteta ne potrebuje koordinatorja in je vedno na voljo.
+    """
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_translation_key = "connection_mode"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = [MODE_CLOUD, MODE_LOCAL, MODE_HYBRID]
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, entry: IVentConfigEntry) -> None:
+        self._entry = entry
+        self._attr_unique_id = f"{entry.entry_id}_connection_mode"
+        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, entry.entry_id)})
+
+    @property
+    def native_value(self) -> str:
+        mode = self._entry.data.get(CONF_MODE, MODE_CLOUD)
+        return mode if mode in self._attr_options else MODE_CLOUD
 
 
 # ---------------------------------------------------------------------------

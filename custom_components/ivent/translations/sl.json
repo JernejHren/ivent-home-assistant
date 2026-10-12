@@ -88,6 +88,14 @@
       },
       "special_mode_ends_at": {
         "name": "Konec posebnega načina"
+      },
+      "connection_mode": {
+        "name": "Način povezave",
+        "state": {
+          "cloud": "Samo oblak",
+          "local": "Samo lokalno",
+          "hybrid": "Kombinirano"
+        }
       }
     },
     "binary_sensor": {

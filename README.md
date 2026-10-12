@@ -71,6 +71,12 @@ Za povezavo v načinu *Samo oblak* ali *Kombinirano* boste potrebovali:
 
 Naprave so v i-Vent sistemu razdeljene na "Skupine" (kjer je lahko združenih več naprav) in na "Posamične naprave".
 
+### Kategorija: Servisna naprava "i-Vent System"
+
+| Entiteta | Platforma | Ikona | Razred | Kategorija | Opis |
+|----------|-----------|-------|--------|------------|------|
+| **Način povezave** | `sensor` | 🔌 | `enum` | Diagnostika | Pokaže nastavljeni način: *Samo oblak*, *Samo lokalno* ali *Kombinirano*. Spremeni se z Rekonfiguracijo. |
+
 ### Kategorija: Skupinska kontrola
 
 | Entiteta | Platforma | Ikona | Razred | Kategorija | Opis |
