@@ -174,3 +174,15 @@ async def test_action_buttons_exist_in_hybrid_but_not_in_cloud(hass, lab):
     reg = er.async_get(hass)
     assert reg.async_get_entity_id("button", DOMAIN, f"{FAKE_MACS[1]}_beacon")
     assert reg.async_get_entity_id("button", DOMAIN, f"{FAKE_MACS[1]}_filter_reset")
+
+
+async def test_connection_mode_sensor_shows_configured_mode(hass, lab):
+    from custom_components.ivent.const import MODE_HYBRID
+    entry = await _setup(hass, lab, MODE_HYBRID)
+    ent = er.async_get(hass).async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_connection_mode")
+    assert ent
+    state = hass.states.get(ent)
+    assert state.state == "hybrid"
+    hub = next(d for d in dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)
+               if (DOMAIN, entry.entry_id) in d.identifiers)
+    assert er.async_get(hass).async_get(ent).device_id == hub.id
