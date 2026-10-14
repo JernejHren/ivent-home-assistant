@@ -5,14 +5,14 @@ from datetime import datetime, timezone
 from typing import Any
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import SIGNAL_STRENGTH_DECIBELS_MILLIWATT
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity import EntityCategory
+from homeassistant.const import EntityCategory
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
-from .coordinator import IVentCoordinator, IVentDeviceData, IVentGroupData
+from .const import CONF_MODE, DOMAIN, MODE_CLOUD, MODE_HYBRID, MODE_LOCAL
+from .coordinator import IVentConfigEntry, IVentCoordinator, IVentDeviceData, IVentGroupData
 from .entity import IVentGroupEntity, IVentDeviceEntity
 
 PARALLEL_UPDATES = 1
@@ -20,12 +20,11 @@ PARALLEL_UPDATES = 1
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: IVentConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Nastavi senzor entitete iz konfiguracijskega vnosa."""
-    data = hass.data[DOMAIN][entry.entry_id]
-    coordinator: IVentCoordinator = data["coordinator"]
+    coordinator: IVentCoordinator = entry.runtime_data.coordinator
 
     added_entities: set[str] = set()
 
@@ -57,8 +56,38 @@ async def async_setup_entry(
         if new_entities:
             async_add_entities(new_entities)
 
+    async_add_entities([IVentConnectionModeSensor(entry)])
     _add_new_entities()
     entry.async_on_unload(coordinator.async_add_listener(_add_new_entities))
+
+
+# ---------------------------------------------------------------------------
+# Servisna naprava "i-Vent System": način povezave
+# ---------------------------------------------------------------------------
+
+class IVentConnectionModeSensor(SensorEntity):
+    """Kateri način povezave je nastavljen: samo oblak, samo lokalno ali kombinirano.
+
+    Vrednost se spremeni samo z rekonfiguracijo (ta ponovno naloži vnos), zato
+    entiteta ne potrebuje koordinatorja in je vedno na voljo.
+    """
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_translation_key = "connection_mode"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = [MODE_CLOUD, MODE_LOCAL, MODE_HYBRID]
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, entry: IVentConfigEntry) -> None:
+        self._entry = entry
+        self._attr_unique_id = f"{entry.entry_id}_connection_mode"
+        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, entry.entry_id)})
+
+    @property
+    def native_value(self) -> str:
+        mode = self._entry.data.get(CONF_MODE, MODE_CLOUD)
+        return mode if mode in self._attr_options else MODE_CLOUD
 
 
 # ---------------------------------------------------------------------------
@@ -72,6 +101,7 @@ class IVentRssiSensor(IVentDeviceEntity, SensorEntity):
     """
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
     _attr_device_class = SensorDeviceClass.SIGNAL_STRENGTH
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = SIGNAL_STRENGTH_DECIBELS_MILLIWATT
@@ -97,6 +127,8 @@ class IVentTimestampSensor(IVentGroupEntity, SensorEntity):
     unique_id: {entry_id}_{group_id}_{key}  (stable — group_id is immutable API int)
     """
 
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
     _attr_device_class = SensorDeviceClass.TIMESTAMP
 
     def __init__(

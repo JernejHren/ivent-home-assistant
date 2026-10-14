@@ -8,7 +8,7 @@ lokalno <-> oblak).
 """
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Optional, Protocol, runtime_checkable
+from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple, runtime_checkable
 
 from .api import (
     IVentGroup,
@@ -71,4 +71,31 @@ class IVentPushBackend(Protocol):
         on_master: Optional[MasterPushCallback] = None,
     ) -> Callable[[], None]:
         """Naroči se na dogodke; vrne funkcijo za odjavo."""
+        ...
+
+
+@runtime_checkable
+class IVentActionBackend(Protocol):
+    """Enkratni ukazi napravi, ki jih oblačni API nima (samo lokalni načini)."""
+
+    async def async_beacon(self, device_mac: str) -> None:
+        """\"Najdi napravo\": enota zapiska."""
+        ...
+
+    async def async_filter_cleaned(self, device_mac: str) -> None:
+        """Ponastavi opozorilo za filter."""
+        ...
+
+
+@runtime_checkable
+class IVentMasterBackend(Protocol):
+    """Backend, ki lahko preklopi na drugega Location Masterja."""
+
+    @property
+    def master_address(self) -> Tuple[str, str]:
+        """Trenutni Master: (IP, MAC kot niz)."""
+        ...
+
+    async def async_switch_master(self, host: str, mac: str) -> None:
+        """Preusmeri na novega Masterja; vrže napako (in ostane na starem), če ne odgovori."""
         ...

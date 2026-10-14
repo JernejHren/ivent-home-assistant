@@ -1,16 +1,16 @@
 {
   "domain": "ivent",
   "name": "i-Vent Smart Home",
-  "quality_scale": "platinum",
-  "integration_type": "hub",
-  "documentation": "https://github.com/JernejHren/ivent-home-assistant",
-  "issue_tracker": "https://github.com/JernejHren/ivent-home-assistant/issues",
   "codeowners": [
     "@JernejHren"
   ],
   "config_flow": true,
-  "iot_class": "cloud_polling",
-  "version": "0.2.6",
+  "dependencies": [],
+  "documentation": "https://github.com/JernejHren/ivent-home-assistant",
+  "integration_type": "hub",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/JernejHren/ivent-home-assistant/issues",
+  "quality_scale": "platinum",
   "requirements": [],
-  "dependencies": []
+  "version": "0.3.0"
 }

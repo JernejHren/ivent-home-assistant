@@ -1,8 +1,16 @@
 rules:
   # BRONZE
   action-setup: done
-  appropriate-polling: done
+  appropriate-polling:
+    status: done
+    comment: >
+      Cloud mode polls every 60 s (no push available). Local/hybrid modes use
+      UDP push from the Location Master and poll only every 120 s as a safety net.
   brands: done
+  runtime-data:
+    status: done
+    comment: Podatki so v ConfigEntry.runtime_data (IVentRuntimeData); hass.data se ne uporablja.
+  docs-removal-instructions: done
   common-modules: done
   config-flow-test-coverage: done
   config-flow: done
@@ -20,13 +28,17 @@ rules:
   log-when-unavailable: done
   parallel-updates: done
   reauthentication-flow: done
-  test-coverage: done
+  test-coverage:
+    status: done
+    comment: Pokritost 96 % (pytest --cov=custom_components.ivent), testi tečejo na HA 2025.1 in 2026.1.
   # GOLD
   devices: done
   diagnostics: done
   discovery-update-info:
     status: exempt
-    comment: Cloud API ne podpira device discovery.
+    comment: >
+      Cloud API ne podpira device discovery. Lokalni načini Master odkrijejo
+      ob nastavitvi (UDP 1028), ob spremembi Masterja (oglas z drugim IP/MAC) pa samodejno preklopijo nanj in shranijo nov naslov v vnos.
   docs-data-update: done
   docs-known-limitations: done
   docs-supported-devices: done
@@ -34,27 +46,34 @@ rules:
   docs-troubleshooting: done
   docs-use-cases: done
   dynamic-devices:
-    status: partial
+    status: done
     comment: >
-      Devices are dynamically discovered and added. Group rename propagates via
-      DeviceInfo refresh on coordinator update. Entity re-registration handles
-      new groups/devices appearing after initial setup.
+      Skupine, naprave in urniki, ki se pojavijo po zagonu, dobijo entitete ob
+      naslednji osvežitvi (listener v vseh platformah; test na vsaki platformi).
   entity-category: done
   entity-device-class: done
-  entity-disabled-by-default: done
+  entity-disabled-by-default:
+    status: done
+    comment: RSSI in časovna senzorja skupine so privzeto onemogočeni (diagnostika).
   entity-translations: done
-  exception-translations: done
-  icon-translations: done
+  exception-translations:
+    status: done
+    comment: Napake servisov in ukazov imajo translation_key v razdelku `exceptions` (en, sl).
+  icon-translations:
+    status: done
+    comment: Ikone so v icons.json.
   reconfiguration-flow: done
   repair-issues:
     status: exempt
     comment: Napake se rešijo z reautentikacijo, ne z repair.
   stale-devices:
-    status: partial
+    status: done
     comment: >
-      Implemented with (DOMAIN, identifier) tuple-sets and race condition
-      protection via last_update_success check. Stale schedule entities
-      are also cleaned up from the entity registry.
+      Skupine, naprave in urnike, ki jih strežnik ne vrača več, lahko uporabnik
+      odstrani ročno (async_remove_config_entry_device; aktivnih ni mogoče
+      odstraniti). Samodejno odstranjevanje (po 3 zaporednih uspešnih osvežitvah,
+      nikoli ob praznem odgovoru ali neuspeli osvežitvi) je opcijsko in privzeto
+      izklopljeno, ker brisanje entitet izgubi prilagoditve in avtomatizacije.
   test-before-configure: done
   # PLATINUM
   async-dependency: done

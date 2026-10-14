@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import contextmanager
-from typing import Any, Callable, Dict, Iterator, List, Optional, cast
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, cast
 
 from .api import (
     IVentApiClientError,
@@ -20,6 +20,7 @@ from .api import (
 )
 from .backend import IVentBackend, MasterPushCallback, RemotePushCallback
 from .ivent_local import const as local_const
+from .ivent_local import convert as cv
 from .ivent_local.client import IVentLocalClient
 from .ivent_local.protocol import ProtocolError
 from .ivent_local.transport import (
@@ -119,6 +120,22 @@ class IVentLocalBackend:
         with _mapped():
             await self._client.async_beacon(device_mac)
 
+    async def async_filter_cleaned(self, device_mac: str) -> None:
+        with _mapped():
+            await self._client.async_filter_cleaned(device_mac)
+
+    # -- menjava Masterja (IVentMasterBackend) --------------------------------
+    @property
+    def master_address(self) -> Tuple[str, str]:
+        host, mac = self._client.master
+        return host, cv.mac_to_str(mac)
+
+    async def async_switch_master(self, host: str, mac: str) -> None:
+        """Preusmeri na novega Masterja šele, ko ta odgovori (trenutni cilj ostane nedotaknjen)."""
+        with _mapped():
+            await self._client.async_probe_master(host, mac)
+        self._client.set_master(host, mac)
+
 
 class IVentHybridBackend:
     """Kombinirano: stanje in pisanje lokalno; oblak za urnike in kot rezerva za pisanje.
@@ -148,6 +165,16 @@ class IVentHybridBackend:
 
     async def async_beacon(self, device_mac: str) -> None:
         await self._local.async_beacon(device_mac)
+
+    async def async_filter_cleaned(self, device_mac: str) -> None:
+        await self._local.async_filter_cleaned(device_mac)
+
+    @property
+    def master_address(self) -> Tuple[str, str]:
+        return self._local.master_address
+
+    async def async_switch_master(self, host: str, mac: str) -> None:
+        await self._local.async_switch_master(host, mac)
 
     # -- branje ---------------------------------------------------------------
     async def async_get_info(self) -> IVentInfoData:

@@ -45,6 +45,13 @@ async def test_coordinator_auth_error_on_schedules(
     assert entry is not None
     assert entry.state is ConfigEntryState.SETUP_ERROR
 
+def _device(registry, identifiers, entry_id):
+    """Iskanje naprave v registru: nov API (HA 2026.x) ali zastareli async_get_device."""
+    if hasattr(registry, "async_get_device_by_identifier"):
+        return registry.async_get_device_by_identifier(next(iter(identifiers)), entry_id)
+    return registry.async_get_device(identifiers=identifiers)
+
+
 async def test_device_rename_updates_registry(hass: HomeAssistant, mock_config_entry, mock_api_client):
     """Test that renaming a device or group in the API updates the HA device registry seamlessly."""
     await hass.config_entries.async_setup(mock_config_entry.entry_id)
@@ -70,14 +77,13 @@ async def test_device_rename_updates_registry(hass: HomeAssistant, mock_config_e
     mock_api_client.async_get_info.return_value = new_data
 
     # Refresh coordinator
-    entry_data = hass.data[DOMAIN][mock_config_entry.entry_id]
-    coordinator = entry_data["coordinator"]
+    coordinator = mock_config_entry.runtime_data.coordinator
     await coordinator.async_refresh()
     await hass.async_block_till_done()
 
     # Get devices again from registry
-    updated_group_dev = device_registry.async_get_device(identifiers=group_identifier)
-    updated_node_dev = device_registry.async_get_device(identifiers=device_identifier)
+    updated_group_dev = _device(device_registry, group_identifier, mock_config_entry.entry_id)
+    updated_node_dev = _device(device_registry, device_identifier, mock_config_entry.entry_id)
 
     # Ensure IDs remain the same (no duplicate devices created)
     assert updated_group_dev is not None
@@ -111,8 +117,7 @@ async def test_entity_reappearance(hass: HomeAssistant, mock_config_entry, mock_
     assert len(fan_entries_before) == 1
     fan_entity_id = fan_entries_before[0].entity_id
 
-    entry_data = hass.data[DOMAIN][mock_config_entry.entry_id]
-    coordinator = entry_data["coordinator"]
+    coordinator = mock_config_entry.runtime_data.coordinator
 
     # Trigger disappearance: return empty groups
     empty_data = copy.deepcopy(MOCK_INFO_DATA)
@@ -121,22 +126,25 @@ async def test_entity_reappearance(hass: HomeAssistant, mock_config_entry, mock_
     await coordinator.async_refresh()
     await hass.async_block_till_done()
 
-    # Verify that the device registry entry for the device is removed after disappearance
-    device = device_registry.async_get_device(identifiers=node_dev_identifiers)
-    assert device is None
-    assert hass.states.get(fan_entity_id) is None
+    # Registry entries are intentionally preserved when the API stops reporting a
+    # device (see test_stale_devices.py): the device stays, the entity is unavailable.
+    device = _device(device_registry, node_dev_identifiers, mock_config_entry.entry_id)
+    assert device is not None
+    assert hass.states.get(fan_entity_id).state == "unavailable"
 
     # Trigger reappearance: restore original data
     mock_api_client.async_get_info.return_value = copy.deepcopy(MOCK_INFO_DATA)
     await hass.config_entries.async_reload(mock_config_entry.entry_id)
     await hass.async_block_till_done()
 
-    # After reappearance, the device registry entry should be present again
-    device = device_registry.async_get_device(identifiers=node_dev_identifiers)
+    # After reappearance the same device registry entry is still there
+    device = _device(device_registry, node_dev_identifiers, mock_config_entry.entry_id)
     assert device is not None
+    assert device.id == node_dev.id
 
-    # Entity MUST be re-added
+    # Entity is available again
     assert hass.states.get(fan_entity_id) is not None
+    assert hass.states.get(fan_entity_id).state != "unavailable"
 
     # No duplicate fan entities were created
     fan_entries_after = [
@@ -162,8 +170,7 @@ async def test_coordinator_recovery(hass: HomeAssistant, mock_config_entry, mock
     # API goes down
     mock_api_client.async_get_info.side_effect = IVentApiClientError("API Down")
     
-    entry_data = hass.data[DOMAIN][mock_config_entry.entry_id]
-    coordinator = entry_data["coordinator"]
+    coordinator = mock_config_entry.runtime_data.coordinator
     await coordinator.async_refresh()
     await hass.async_block_till_done()
 
@@ -187,8 +194,7 @@ async def test_delayed_refresh(hass: HomeAssistant, mock_config_entry, mock_api_
     await hass.config_entries.async_setup(mock_config_entry.entry_id)
     await hass.async_block_till_done()
 
-    entry_data = hass.data[DOMAIN][mock_config_entry.entry_id]
-    coordinator = entry_data["coordinator"]
+    coordinator = mock_config_entry.runtime_data.coordinator
 
     # Reset call count
     mock_api_client.async_get_info.reset_mock()
@@ -222,8 +228,7 @@ async def test_delayed_refresh_debounce(hass: HomeAssistant, mock_config_entry, 
     await hass.config_entries.async_setup(mock_config_entry.entry_id)
     await hass.async_block_till_done()
 
-    entry_data = hass.data[DOMAIN][mock_config_entry.entry_id]
-    coordinator = entry_data["coordinator"]
+    coordinator = mock_config_entry.runtime_data.coordinator
 
     # Patch async_request_refresh on the coordinator instance so we can count
     # invocations without hitting the real API.
@@ -273,14 +278,13 @@ async def test_entity_reappearance_no_duplicate(hass: HomeAssistant, mock_config
     empty_data["groups"] = []
     mock_api_client.async_get_info.return_value = empty_data
 
-    entry_data = hass.data[DOMAIN][mock_config_entry.entry_id]
-    coordinator = entry_data["coordinator"]
+    coordinator = mock_config_entry.runtime_data.coordinator
     await coordinator.async_refresh()
     await hass.async_block_till_done()
 
-    # Stale cleanup cascades device removal → entity is fully removed from
-    # registry (not just unavailable): hass.states.get returns None.
-    assert hass.states.get(fan_entity_id) is None
+    # Registry entries are intentionally preserved (see test_stale_devices.py):
+    # the entity is only unavailable while its group is missing from the API.
+    assert hass.states.get(fan_entity_id).state == "unavailable"
 
     # Step 2: Device reappears
     mock_api_client.async_get_info.return_value = copy.deepcopy(MOCK_INFO_DATA)

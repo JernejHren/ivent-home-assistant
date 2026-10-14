@@ -14,29 +14,112 @@ from homeassistant.helpers import (
 from homeassistant.exceptions import ServiceValidationError
 
 from .api import IVentApiClient, IVentApiClientError
-from .const import DOMAIN, PLATFORMS
-from .coordinator import IVentCoordinator
+from .backend import IVentBackend
+from .config_flow import OPTIONS_AUTO_RELOAD
+from .const import (
+    CONF_LOCAL_HOST, CONF_LOCAL_MAC, CONF_LOCATION_ID, CONF_MODE, DOMAIN, MODE_CLOUD,
+    MODE_HYBRID, MODE_LOCAL, OPT_INFO_FALLBACK, PLATFORMS,
+)
+from .local_backend import IVentHybridBackend, IVentLocalBackend
+from .coordinator import IVentConfigEntry, IVentCoordinator, IVentRuntimeData
 
 _LOGGER = logging.getLogger(__name__)
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Nastavi i-Vent integracijo iz konfiguracijskega vnosa."""
-    hass.data.setdefault(DOMAIN, {})
+def _build_backend(hass: HomeAssistant, entry: ConfigEntry) -> IVentBackend:
+    """Backend glede na izbrani način (vnosi brez ``mode`` so oblačni)."""
+    mode = entry.data.get(CONF_MODE, MODE_CLOUD)
 
-    client = IVentApiClient(
-        session=async_get_clientsession(hass),
-        api_key=entry.data["api_key"],
-        location_id=entry.data["location_id"],
+    def cloud() -> IVentApiClient:
+        return IVentApiClient(
+            session=async_get_clientsession(hass),
+            api_key=entry.data["api_key"],
+            location_id=entry.data[CONF_LOCATION_ID],
+        )
+
+    if mode == MODE_CLOUD:
+        return cloud()
+
+    local = IVentLocalBackend.create(
+        # oblak sprejema u64 tudi predznačeno; lokalno vedno nepredznačeno
+        location_id=int(entry.data[CONF_LOCATION_ID]) % (1 << 64),
+        master_host=entry.data[CONF_LOCAL_HOST],
+        master_mac=entry.data[CONF_LOCAL_MAC],
+    )
+    if mode == MODE_LOCAL:
+        return local
+    return IVentHybridBackend(
+        local, cloud(), info_fallback=entry.options.get(OPT_INFO_FALLBACK, False))
+
+
+async def _async_options_updated(hass: HomeAssistant, entry: IVentConfigEntry) -> None:
+    """Starejši HA: ponovno naloži vnos, a samo ob spremembi nastavitev.
+
+    Listener se sproži ob vsaki spremembi vnosa (tudi pri rekonfiguraciji, ki vnos
+    sama ponovno naloži), zato primerjamo z nastavitvami ob zagonu.
+    Na novejšem HA tega ne uporabljamo: OptionsFlowWithReload naloži vnos sam.
+    """
+    runtime_data = getattr(entry, "runtime_data", None)
+    if runtime_data is not None and runtime_data.options == dict(entry.options):
+        return
+    await hass.config_entries.async_reload(entry.entry_id)
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant, entry: IVentConfigEntry, device_entry: dr.DeviceEntry
+) -> bool:
+    """Uporabnik lahko ročno odstrani samo napravo, ki je strežnik ne vrača več."""
+    data = entry.runtime_data.coordinator.data
+    if data is None:
+        return False
+    prefix = f"{entry.entry_id}_"
+    for domain, ident in device_entry.identifiers:
+        if domain != DOMAIN:
+            continue
+        if ident == entry.entry_id:
+            return False  # servisna naprava
+        if ident.startswith(prefix):
+            rest = ident[len(prefix):]
+            if rest.isdigit() and int(rest) in data.groups_by_id:
+                return False
+        elif ident in data.devices_by_mac:
+            return False
+    return True
+
+
+def _service_error(key: str, **placeholders: str) -> ServiceValidationError:
+    """Napaka servisa s prevedenim sporočilom (exceptions v translations)."""
+    return ServiceValidationError(
+        translation_domain=DOMAIN,
+        translation_key=key,
+        translation_placeholders=placeholders or None,
     )
 
-    coordinator = IVentCoordinator(hass, client, entry)
-    await coordinator.async_config_entry_first_refresh()
 
-    hass.data[DOMAIN][entry.entry_id] = {
-        "coordinator": coordinator,
-        "client": client,
-    }
+async def async_setup_entry(hass: HomeAssistant, entry: IVentConfigEntry) -> bool:
+    """Nastavi i-Vent integracijo iz konfiguracijskega vnosa."""
+    mode = entry.data.get(CONF_MODE, MODE_CLOUD)
+    if mode == MODE_CLOUD:
+        _LOGGER.info("Setting up i-Vent in cloud mode")
+    else:
+        _LOGGER.info("Setting up i-Vent in %s mode (Master %s)", mode, entry.data[CONF_LOCAL_HOST])
+    client = _build_backend(hass, entry)
+    if not OPTIONS_AUTO_RELOAD:
+        entry.async_on_unload(entry.add_update_listener(_async_options_updated))
+
+    coordinator = IVentCoordinator(hass, client, entry)
+    await coordinator.async_start_push()  # no-op pri oblačnem odjemalcu
+    try:
+        await coordinator.async_config_entry_first_refresh()
+    except Exception:
+        await coordinator.async_stop_push()
+        raise
+
+    entry.runtime_data = IVentRuntimeData(
+        coordinator=coordinator,
+        client=client,
+        options=dict(entry.options),  # za _async_options_updated (star HA)
+    )
 
     # Ustvarimo glavno "servisno" napravo, na katero se vežejo vse ostale (via_device)
     device_registry = dr.async_get(hass)
@@ -45,9 +128,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         identifiers={(DOMAIN, entry.entry_id)},
         manufacturer="i-Vent",
         name="i-Vent System",
-        model="Cloud Location",
+        model={MODE_CLOUD: "Cloud Location", MODE_LOCAL: "Local Location",
+               MODE_HYBRID: "Hybrid Location"}.get(entry.data.get(CONF_MODE, MODE_CLOUD),
+                                                    "Cloud Location"),
         entry_type=dr.DeviceEntryType.SERVICE,
-        configuration_url="https://cloud.i-vent.com/",
+        configuration_url=(
+            None if entry.data.get(CONF_MODE) == MODE_LOCAL else "https://cloud.i-vent.com/"),
     )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -57,60 +143,60 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def handle_create_group(call: ServiceCall) -> None:
         name = call.data.get("name")
         if not name or len(name.strip()) == 0:
-            raise ServiceValidationError("Ime skupine ne sme biti prazno")
+            raise _service_error("group_name_empty")
         try:
             await client.async_create_group(name)
         except IVentApiClientError as err:
-            raise ServiceValidationError(f"Napaka pri ustvarjanju skupine: {err}") from err
+            raise _service_error("create_group_failed", error=str(err)) from err
         await coordinator.async_request_delayed_refresh()
 
     async def handle_delete_group(call: ServiceCall) -> None:
         group_id = call.data.get("group_id")
         if group_id is None:
-            raise ServiceValidationError("Manjka ID skupine")
+            raise _service_error("group_id_missing")
         try:
             await client.async_modify_group(group_id, {"delete": True})
         except IVentApiClientError as err:
-            raise ServiceValidationError(f"Napaka pri brisanju skupine: {err}") from err
+            raise _service_error("delete_group_failed", error=str(err)) from err
         await coordinator.async_request_delayed_refresh()
 
     async def handle_rename_group(call: ServiceCall) -> None:
         group_id = call.data.get("group_id")
         new_name = call.data.get("new_name")
         if group_id is None:
-            raise ServiceValidationError("Manjka ID skupine")
+            raise _service_error("group_id_missing")
         if not new_name or len(new_name.strip()) == 0:
-            raise ServiceValidationError("Novo ime skupine ne sme biti prazno")
+            raise _service_error("new_group_name_empty")
         try:
             await client.async_modify_group(group_id, {"name": new_name})
         except IVentApiClientError as err:
-            raise ServiceValidationError(f"Napaka pri preimenovanju skupine: {err}") from err
+            raise _service_error("rename_group_failed", error=str(err)) from err
         await coordinator.async_request_delayed_refresh()
 
     async def handle_rename_device(call: ServiceCall) -> None:
         device_mac = call.data.get("device_mac")
         new_name = call.data.get("new_name")
         if not device_mac:
-            raise ServiceValidationError("Manjka MAC naprave")
+            raise _service_error("device_mac_missing")
         if not new_name or len(new_name.strip()) == 0:
-            raise ServiceValidationError("Novo ime naprave ne sme biti prazno")
+            raise _service_error("new_device_name_empty")
         try:
             await client.async_modify_device(device_mac, {"name": new_name})
         except IVentApiClientError as err:
-            raise ServiceValidationError(f"Napaka pri preimenovanju naprave: {err}") from err
+            raise _service_error("rename_device_failed", error=str(err)) from err
         await coordinator.async_request_delayed_refresh()
 
     async def handle_move_device(call: ServiceCall) -> None:
         device_mac = call.data.get("device_mac")
         group_id = call.data.get("group_id")
         if not device_mac:
-            raise ServiceValidationError("Manjka MAC naprave")
+            raise _service_error("device_mac_missing")
         if group_id is None:
-            raise ServiceValidationError("Manjka ciljna skupina")
+            raise _service_error("target_group_missing")
         try:
             await client.async_modify_device(device_mac, {"group_id": group_id})
         except IVentApiClientError as err:
-            raise ServiceValidationError(f"Napaka pri premikanju naprave: {err}") from err
+            raise _service_error("move_device_failed", error=str(err)) from err
         await coordinator.async_request_delayed_refresh()
 
     if not hass.services.has_service(DOMAIN, "create_group"):
@@ -190,24 +276,34 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
 
         hass.config_entries.async_update_entry(config_entry, version=3)
 
+    if config_entry.version < 4:
+        # v4: izbira načina delovanja; obstoječi vnosi so oblačni
+        hass.config_entries.async_update_entry(
+            config_entry, data={**config_entry.data, CONF_MODE: MODE_CLOUD}, version=4)
+
     _LOGGER.info("Migration to version %s successful", config_entry.version)
 
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Odstrani konfiguracijski vnos."""
-    coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
-    task = coordinator._pending_refresh_task
-    if task and not task.done():
-        task.cancel()
-    coordinator._pending_refresh_task = None
+async def async_unload_entry(hass: HomeAssistant, entry: IVentConfigEntry) -> bool:
+    """Odstrani konfiguracijski vnos (tudi če setup ni dokončal priprave podatkov)."""
+    runtime_data = getattr(entry, "runtime_data", None)
+    coordinator = runtime_data.coordinator if runtime_data else None
+    if coordinator is not None:
+        task = coordinator._pending_refresh_task
+        if task and not task.done():
+            task.cancel()
+        coordinator._pending_refresh_task = None
 
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id)
+    if unload_ok and coordinator is not None:
+        await coordinator.async_stop_push()
 
-    if len(hass.data[DOMAIN]) == 0:
+    if unload_ok and not any(
+        e.entry_id != entry.entry_id
+        for e in hass.config_entries.async_loaded_entries(DOMAIN)
+    ):
         for service in ("create_group", "delete_group", "rename_group",
                         "rename_device", "move_device_to_group"):
             if hass.services.has_service(DOMAIN, service):

@@ -1,0 +1,73 @@
+{
+  "entity": {
+    "button": {
+      "delete_group": {
+        "default": "mdi:delete-forever"
+      },
+      "beacon": {
+        "default": "mdi:bullhorn"
+      },
+      "filter_reset": {
+        "default": "mdi:air-filter"
+      }
+    },
+    "select": {
+      "speed": {
+        "default": "mdi:fan-speed-2"
+      },
+      "move_device": {
+        "default": "mdi:arrow-right-bold-box-outline"
+      }
+    },
+    "switch": {
+      "led": {
+        "default": "mdi:led-on",
+        "state": {
+          "off": "mdi:led-off"
+        }
+      },
+      "buzzer": {
+        "default": "mdi:volume-high",
+        "state": {
+          "off": "mdi:volume-off"
+        }
+      },
+      "night1": {
+        "default": "mdi:weather-night"
+      },
+      "night2": {
+        "default": "mdi:weather-night"
+      },
+      "snooze": {
+        "default": "mdi:alarm-snooze"
+      },
+      "boost": {
+        "default": "mdi:rocket-launch"
+      },
+      "schedule": {
+        "default": "mdi:calendar-clock"
+      },
+      "reverse_flow": {
+        "default": "mdi:swap-horizontal-bold"
+      }
+    },
+    "text": {
+      "group_name": {
+        "default": "mdi:rename-box"
+      },
+      "device_name": {
+        "default": "mdi:rename-box"
+      }
+    },
+    "sensor": {
+      "connection_mode": {
+        "default": "mdi:lan-connect",
+        "state": {
+          "cloud": "mdi:cloud",
+          "local": "mdi:lan",
+          "hybrid": "mdi:cloud-braces"
+        }
+      }
+    }
+  }
+}
