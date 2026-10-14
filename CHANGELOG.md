@@ -1,8 +1,8 @@
 # Changelog
 
-## 0.3.0-rc.1 (manifest: `0.3.0rc1`)
+## 0.3.0 — 2026-10-14
 
-**Local control (release candidate; includes everything from beta 1).** Three selectable modes — cloud only, local only, combined — chosen when adding the integration and changeable later via *Reconfigure* (entities are not duplicated).
+**Local control.** Three selectable modes — cloud only, local only, combined — chosen when adding the integration and changeable later via *Reconfigure* (entities are not duplicated).
 
 ### Added
 - **Local mode** over UDP port 1028 (Location Master): instant state via push, rare polling (120 s) as a safety net, Master auto-discovery or manual IP/MAC/location ID.
