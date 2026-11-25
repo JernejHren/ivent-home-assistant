@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.1 — 2026-11-25
+
+### Fixed
+- **`fan.set_preset_mode` now works.** The fan entity advertised the preset feature (Normal / Bypass) but did not implement the service, so the call failed with a `NotImplementedError` in a background task and nothing was sent to the device (#12, thanks to @jasasonc).
+- **Changing the preset no longer touches speed or on/off state** (#13). The current speed is kept and a switched-off fan stays off. On the reserved **iVent** group the preset is applied to every real group while each keeps its own speed and off state, matching the ventilation mode select.
+
+### Tests
+- Added tests for preset changes (speed preserved, off state preserved, invalid preset, optimistic rollback, fan-out from the iVent group).
+
 ## 0.3.0 — 2026-10-14
 
 **Local control.** Three selectable modes — cloud only, local only, combined — chosen when adding the integration and changeable later via *Reconfigure* (entities are not duplicated).
