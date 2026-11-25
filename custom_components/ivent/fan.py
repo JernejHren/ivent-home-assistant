@@ -143,10 +143,19 @@ class IVentFan(IVentGroupEntity, FanEntity):
         Required when advertising the PRESET_MODE feature; otherwise HA uses
         the base implementation that raises NotImplementedError in a
         background task (the same trap as async_set_percentage). The current
-        speed is kept; only the recuperation/bypass mode changes.
+        speed is kept and a switched-off group stays off; only the
+        recuperation/bypass mode changes (same semantics as the ventilation
+        mode select entity, which matters for the "all devices" group fan-out).
         """
         self._valid_preset_mode_or_raise(preset_mode)
-        await self.async_turn_on(preset_mode=preset_mode)
+        payload = self._build_remote_settings_payload(
+            preset_mode,
+            None,
+            keep_off=True,
+        )
+        await self._async_handle_write(
+            "preset_mode", preset_mode, self.async_update_group(payload)
+        )
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Izklopi ventilator."""

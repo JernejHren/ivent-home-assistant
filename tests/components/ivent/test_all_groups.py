@@ -112,6 +112,25 @@ async def test_speed_on_all_group_keeps_each_groups_off_state(
     assert calls[3]["remote_work_mode"]["work_mode"] == "IVentWorkOff"
 
 
+async def test_preset_on_all_group_keeps_speed_and_off_state(
+    hass: HomeAssistant, mock_config_entry, three_groups
+):
+    """Preset na skupini 1 ne spremeni hitrosti in ne vklopi izklopljene skupine."""
+    info = three_groups.async_get_info.return_value
+    info["groups"][2]["remote"]["work_mode"] = "IVentWorkOff"
+    await _setup(hass, mock_config_entry)
+    ent = _entity_id(hass, mock_config_entry, 1, "fan", "fan")
+    entity = next(
+        e for e in hass.data["entity_components"]["fan"].entities if e.entity_id == ent
+    )
+    await entity.async_set_preset_mode("Bypass")
+    calls = _calls(three_groups)
+    assert calls[2]["remote_work_mode"]["remote_control_work_mode"] == "Bypass"
+    assert calls[2]["remote_work_mode"]["remote_control_speed"] == 2
+    assert calls[2]["remote_work_mode"]["work_mode"] == "IVentBypass2"
+    assert calls[3]["remote_work_mode"]["work_mode"] == "IVentWorkOff"
+
+
 async def test_partial_failure_raises_but_other_group_written(
     hass: HomeAssistant, mock_config_entry, three_groups
 ):
