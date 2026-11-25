@@ -1,6 +1,8 @@
 import pytest
 import copy
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
+from custom_components.ivent.api import IVentApiClientError
 from custom_components.ivent.const import API_MODE_WORK_OFF
 from .conftest import MOCK_INFO_DATA
 
@@ -268,3 +270,75 @@ async def test_fan_set_preset_mode(hass, mock_config_entry, mock_api_client):
     args = mock_api_client.async_modify_group.call_args[0]
     assert args[1]["remote_work_mode"]["remote_control_work_mode"] == "Bypass"
     assert args[1]["remote_work_mode"]["work_mode"].startswith("IVentBypass")
+
+async def test_fan_set_preset_mode_keeps_speed(hass, mock_config_entry, mock_api_client):
+    """Preset change must not touch the current speed."""
+    info = copy.deepcopy(MOCK_INFO_DATA)
+    info['groups'][0]['remote']['work_mode'] = 'IVentRecuperation3'
+    info['groups'][0]['remote']['remote_control_speed'] = 3
+    mock_api_client.async_get_info.return_value = info
+    await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    await hass.services.async_call(
+        'fan', 'set_preset_mode',
+        {'entity_id': 'fan.dnevna_soba_fan', 'preset_mode': 'Bypass'},
+        blocking=True,
+    )
+
+    remote = mock_api_client.async_modify_group.call_args[0][1]["remote_work_mode"]
+    assert remote["work_mode"] == "IVentBypass3"
+    assert remote["remote_control_speed"] == 3
+    assert remote["remote_control_work_mode"] == "Bypass"
+
+
+async def test_fan_set_preset_mode_keeps_off_group_off(hass, mock_config_entry, mock_api_client):
+    """Changing preset on a switched-off fan must not turn it on."""
+    off_data = copy.deepcopy(MOCK_INFO_DATA)
+    off_data['groups'][0]['remote']['work_mode'] = API_MODE_WORK_OFF
+    mock_api_client.async_get_info.return_value = off_data
+    await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    await hass.services.async_call(
+        'fan', 'set_preset_mode',
+        {'entity_id': 'fan.dnevna_soba_fan', 'preset_mode': 'Bypass'},
+        blocking=True,
+    )
+
+    remote = mock_api_client.async_modify_group.call_args[0][1]["remote_work_mode"]
+    assert remote["work_mode"] == API_MODE_WORK_OFF
+    assert remote["remote_control_work_mode"] == "Bypass"
+    assert hass.states.get('fan.dnevna_soba_fan').state == 'off'
+
+
+async def test_fan_set_preset_mode_invalid(hass, mock_config_entry, mock_api_client):
+    """An unknown preset is rejected before any API call."""
+    await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    with pytest.raises(HomeAssistantError):
+        await hass.services.async_call(
+            'fan', 'set_preset_mode',
+            {'entity_id': 'fan.dnevna_soba_fan', 'preset_mode': 'Nonsense'},
+            blocking=True,
+        )
+    mock_api_client.async_modify_group.assert_not_called()
+
+
+async def test_fan_set_preset_mode_rolls_back_on_error(hass, mock_config_entry, mock_api_client):
+    """A failed write reverts the optimistic preset."""
+    await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+    mock_api_client.async_modify_group.side_effect = IVentApiClientError("Mocked failure")
+
+    with pytest.raises((IVentApiClientError, HomeAssistantError)):
+        await hass.services.async_call(
+            'fan', 'set_preset_mode',
+            {'entity_id': 'fan.dnevna_soba_fan', 'preset_mode': 'Bypass'},
+            blocking=True,
+        )
+    await hass.async_block_till_done()
+
+    state = hass.states.get('fan.dnevna_soba_fan')
+    assert state.attributes.get("preset_mode") == "Normal"
