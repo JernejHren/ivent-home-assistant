@@ -137,6 +137,17 @@ class IVentFan(IVentGroupEntity, FanEntity):
             return
         await self.async_turn_on(percentage=percentage)
 
+    async def async_set_preset_mode(self, preset_mode: str) -> None:
+        """Set the ventilation preset mode (Normal / Bypass).
+
+        Required when advertising the PRESET_MODE feature; otherwise HA uses
+        the base implementation that raises NotImplementedError in a
+        background task (the same trap as async_set_percentage). The current
+        speed is kept; only the recuperation/bypass mode changes.
+        """
+        self._valid_preset_mode_or_raise(preset_mode)
+        await self.async_turn_on(preset_mode=preset_mode)
+
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Izklopi ventilator."""
         payload = self._prepare_payload({"work_mode": API_MODE_WORK_OFF})

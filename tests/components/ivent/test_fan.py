@@ -253,3 +253,18 @@ async def test_fan_turn_on_optimistic_state_rollback_on_error(hass, mock_config_
     assert state.attributes.get("percentage") == 0
     assert state.attributes.get("preset_mode") != "Bypass"
     assert state.attributes.get("preset_mode") == original_preset
+
+async def test_fan_set_preset_mode(hass, mock_config_entry, mock_api_client):
+    """Test fan.set_preset_mode switches ventilation mode and keeps the speed."""
+    await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    await hass.services.async_call(
+        'fan', 'set_preset_mode',
+        {'entity_id': 'fan.dnevna_soba_fan', 'preset_mode': 'Bypass'},
+        blocking=True,
+    )
+
+    args = mock_api_client.async_modify_group.call_args[0]
+    assert args[1]["remote_work_mode"]["remote_control_work_mode"] == "Bypass"
+    assert args[1]["remote_work_mode"]["work_mode"].startswith("IVentBypass")
