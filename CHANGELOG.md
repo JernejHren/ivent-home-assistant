@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.2 — 2026-11-26
+
+### Added
+- **Group profile duration sensors** (#16, thanks to @jasasonc). Four diagnostic sensors per group, disabled by default: *Boost duration*, *Snooze duration*, *Night mode 1 duration* and *Night mode 2 duration*, in seconds. The values come from the group profile reported by the Location Master, so they are available in local and combined mode only; in cloud mode they have no value.
+
+### Fixed
+- **"Special mode ends at" no longer shows a stale time** (#15, thanks to @jasasonc). After a Boost, Snooze or Night mode was cancelled the device keeps the old end timestamp, so the sensor kept showing it. It now reports *unknown* whenever no special mode is active.
+
 ## 0.3.1 — 2026-11-25
 
 ### Fixed
