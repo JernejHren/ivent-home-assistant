@@ -7,6 +7,10 @@ SENSOR_IDS = {
     "sensor.enota_1_signal": "AA:BB:CC:DD:EE:FF_rssi",
     "sensor.dnevna_soba_last_mode_change": "{entry}_1_work_mode_changed_at",
     "sensor.dnevna_soba_special_mode_ends_at": "{entry}_1_special_mode_ends_at",
+    "sensor.dnevna_soba_boost_duration": "{entry}_1_boost_time",
+    "sensor.dnevna_soba_snooze_duration": "{entry}_1_snooze_time",
+    "sensor.dnevna_soba_night_mode_1_duration": "{entry}_1_sleep_mode_duration_1",
+    "sensor.dnevna_soba_night_mode_2_duration": "{entry}_1_sleep_mode_duration_2",
 }
 
 
@@ -54,6 +58,35 @@ async def test_sensor_entities(hass: HomeAssistant, mock_config_entry, mock_api_
     ends_at_state = hass.states.get("sensor.dnevna_soba_special_mode_ends_at")
     assert ends_at_state is not None
     assert ends_at_state.state == "unknown"  # 0 in mock means None
+
+    # Profile duration sensors (seconds)
+    for entity_id, seconds in (
+        ("sensor.dnevna_soba_boost_duration", "3600"),
+        ("sensor.dnevna_soba_snooze_duration", "1800"),
+        ("sensor.dnevna_soba_night_mode_1_duration", "28800"),
+        ("sensor.dnevna_soba_night_mode_2_duration", "21600"),
+    ):
+        state = hass.states.get(entity_id)
+        assert state is not None, entity_id
+        assert state.state == seconds
+        assert state.attributes.get("device_class") == "duration"
+        assert state.attributes.get("unit_of_measurement") == "s"
+
+
+async def test_profile_duration_sensors_without_profile(hass: HomeAssistant, mock_config_entry, mock_api_client):
+    """Without a profile (cloud mode) the duration sensors have no value."""
+    from .conftest import MOCK_INFO_DATA
+    import copy
+    data = copy.deepcopy(MOCK_INFO_DATA)
+    del data["groups"][0]["profile"]
+    mock_api_client.async_get_info.return_value = data
+    _enable_sensors(hass, mock_config_entry)
+    await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    state = hass.states.get("sensor.dnevna_soba_boost_duration")
+    assert state is not None
+    assert state.state == "unknown"
 
 async def test_sensor_updates(hass: HomeAssistant, mock_config_entry, mock_api_client):
     """Test that sensor values update correctly from API changes."""

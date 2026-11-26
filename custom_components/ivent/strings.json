@@ -89,6 +89,18 @@
       "special_mode_ends_at": {
         "name": "Konec posebnega načina"
       },
+      "boost_duration": {
+        "name": "Trajanje intenzivnega prezračevanja (Boost)"
+      },
+      "snooze_duration": {
+        "name": "Trajanje dremeža (začasni izklop)"
+      },
+      "night1_duration": {
+        "name": "Trajanje nočnega načina 1"
+      },
+      "night2_duration": {
+        "name": "Trajanje nočnega načina 2"
+      },
       "connection_mode": {
         "name": "Način povezave",
         "state": {

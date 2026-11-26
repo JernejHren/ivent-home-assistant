@@ -41,6 +41,7 @@ class IVentGroup(TypedDict):
     led_work_mode: str
     buzzer_work_mode: str
     remote: IVentRemote
+    profile: NotRequired[Dict[str, int]]
     devices: List[IVentDevice]
 
 

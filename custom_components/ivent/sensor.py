@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
-from homeassistant.const import SIGNAL_STRENGTH_DECIBELS_MILLIWATT
+from homeassistant.const import SIGNAL_STRENGTH_DECIBELS_MILLIWATT, UnitOfTime
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.const import EntityCategory
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -16,6 +16,20 @@ from .coordinator import IVentConfigEntry, IVentCoordinator, IVentDeviceData, IV
 from .entity import IVentGroupEntity, IVentDeviceEntity
 
 PARALLEL_UPDATES = 1
+
+# GroupProfile field -> unique-id suffix, and GroupProfile field -> translation key.
+PROFILE_DURATION_KEYS: dict[str, str] = {
+    "boostTime": "boost_time",
+    "snoozeTime": "snooze_time",
+    "sleepModeDuration1": "sleep_mode_duration_1",
+    "sleepModeDuration2": "sleep_mode_duration_2",
+}
+PROFILE_DURATION_TRANSLATION_KEYS: dict[str, str] = {
+    "boostTime": "boost_duration",
+    "snoozeTime": "snooze_duration",
+    "sleepModeDuration1": "night1_duration",
+    "sleepModeDuration2": "night2_duration",
+}
 
 
 async def async_setup_entry(
@@ -46,6 +60,12 @@ async def async_setup_entry(
             if uid2 not in added_entities:
                 added_entities.add(uid2)
                 new_entities.append(IVentTimestampSensor(coordinator, group, "special_mode_ends_at"))
+
+            for profile_key, key in PROFILE_DURATION_KEYS.items():
+                uid_d = f"{entry_id}_{group.id}_{key}"
+                if uid_d not in added_entities:
+                    added_entities.add(uid_d)
+                    new_entities.append(IVentProfileDurationSensor(coordinator, group, profile_key))
 
         for device in coordinator.data.devices_by_mac.values():
             uid = f"{device.mac_address}_rssi"
@@ -153,3 +173,36 @@ class IVentTimestampSensor(IVentGroupEntity, SensorEntity):
             else group.special_mode_ends_at
         )
 
+
+class IVentProfileDurationSensor(IVentGroupEntity, SensorEntity):
+    """Duration stored in the group profile (boost, snooze, night modes).
+
+    The value is in seconds. Only local and hybrid mode decode the profile;
+    in cloud mode the sensor has no value.
+
+    unique_id: {entry_id}_{group_id}_{key}  (stable — group_id is immutable API int)
+    """
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_native_unit_of_measurement = UnitOfTime.SECONDS
+
+    def __init__(
+        self,
+        coordinator: IVentCoordinator,
+        group_data: IVentGroupData,
+        profile_key: str,
+    ) -> None:
+        super().__init__(coordinator, group_data)
+        self._profile_key = profile_key
+        key = PROFILE_DURATION_KEYS[profile_key]
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{self._group_id}_{key}"
+        self._attr_translation_key = PROFILE_DURATION_TRANSLATION_KEYS[profile_key]
+
+    @property
+    def native_value(self) -> int | None:
+        group = self._group
+        if group is None:
+            return None
+        return group.profile.get(self._profile_key)
