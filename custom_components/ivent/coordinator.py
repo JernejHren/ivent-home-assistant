@@ -86,6 +86,11 @@ class IVentGroupData:
         }
 
     @property
+    def profile(self) -> Dict[str, int]:
+        """Group profile durations in seconds (local/hybrid mode only)."""
+        return self.raw.get("profile") or {}
+
+    @property
     def work_mode(self) -> str:
         return self.remote.get("work_mode", "")
 

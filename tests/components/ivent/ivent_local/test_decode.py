@@ -102,7 +102,7 @@ def test_build_info_matches_cloud_shape(reads, cloud_info):
     for g in info["groups"]:
         cg = cloud[g["id"]]
         assert g["name"] == cg["name"]
-        assert set(g) == set(cg)
+        assert set(g) - {"profile"} == set(cg)  # profile is local-only
         shared = set(g["remote"]) & set(cg["remote"])
         assert {"work_mode", "special_mode", "remote_control_speed", "bypass_rotation",
                 "remote_control_work_mode"} <= shared
@@ -111,3 +111,27 @@ def test_build_info_matches_cloud_shape(reads, cloud_info):
         for d, cd in zip(g["devices"], cg["devices"]):
             for k in ("reverse_flow", "device_name", "firmware_version", "status_esp", "alive"):
                 assert d[k] == cd[k], k
+
+
+def test_build_info_keeps_profile(reads):
+    """The group profile decoded from the Master list survives build_info."""
+    _, groups = _groups(reads)
+    _, devices = _devices(reads)
+    info = cv.build_info(groups, devices)
+    by_id = {g["id"]: g for g in groups}
+    for g in info["groups"]:
+        assert g["profile"] == by_id[g["id"]]["profile"]
+        assert set(g["profile"]) == set(c.GROUP_PROFILE_FIELDS)
+    assert any(g["profile"]["boostTime"] for g in info["groups"])
+
+
+def test_build_info_profile_falls_back_to_read_group(reads):
+    """When the Master list carries no profile, the read-group profile is used."""
+    _, groups = _groups(reads)
+    _, devices = _devices(reads)
+    stripped = [{k: v for k, v in g.items() if k != "profile"} for g in groups]
+    gid = stripped[0]["id"]
+    profile = {"boostTime": 900}
+    info = cv.build_info(stripped, devices, {gid: {"profile": profile}})
+    assert info["groups"][0]["profile"] == profile
+    assert info["groups"][1]["profile"] == {}

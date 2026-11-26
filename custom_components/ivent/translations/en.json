@@ -89,6 +89,18 @@
       "special_mode_ends_at": {
         "name": "Special mode ends at"
       },
+      "boost_duration": {
+        "name": "Boost duration"
+      },
+      "snooze_duration": {
+        "name": "Snooze duration"
+      },
+      "night1_duration": {
+        "name": "Night mode 1 duration"
+      },
+      "night2_duration": {
+        "name": "Night mode 2 duration"
+      },
       "connection_mode": {
         "name": "Connection mode",
         "state": {

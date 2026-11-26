@@ -124,6 +124,7 @@ def build_info(groups: List[Dict[str, Any]], devices: List[Dict[str, Any]],
             "buzzer_work_mode": full.get("buzzer_work_mode", "BuzzerOffMode"),
             "enable_schedule": full.get("enable_schedule", False),
             "remote": g["remote"],
+            "profile": g.get("profile") or full.get("profile", {}),
             "devices": [
                 {k: d[k] for k in ("mac_address", "device_name", "rssi", "firmware_version",
                                    "alive", "status_esp", "reverse_flow")}

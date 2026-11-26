@@ -27,6 +27,12 @@ MOCK_INFO_DATA = {
             'work_mode_changed_at': 1700000000,
             'special_mode_ends_at': 0,
         },
+        'profile': {
+            'boostTime': 3600,
+            'snoozeTime': 1800,
+            'sleepModeDuration1': 28800,
+            'sleepModeDuration2': 21600,
+        },
         'devices': [{
             'mac_address': 'AA:BB:CC:DD:EE:FF',
             'device_name': 'Enota 1',
