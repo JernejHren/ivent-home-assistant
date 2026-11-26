@@ -27,7 +27,13 @@ from .api import (
     IVentScheduleItem,
 )
 from .backend import IVentBackend, IVentMasterBackend, IVentPushBackend
-from .const import CONF_LOCAL_HOST, CONF_LOCAL_MAC, DOMAIN, OPT_AUTO_REMOVE_STALE
+from .const import (
+    API_MODE_SPECIAL_OFF,
+    CONF_LOCAL_HOST,
+    CONF_LOCAL_MAC,
+    DOMAIN,
+    OPT_AUTO_REMOVE_STALE,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -114,6 +120,9 @@ class IVentGroupData:
 
     @property
     def special_mode_ends_at(self) -> datetime | None:
+        """Return the special mode end time, or None when no special mode is active."""
+        if self.special_mode in ("", API_MODE_SPECIAL_OFF):
+            return None
         ts = self.remote.get("special_mode_ends_at")
         if not ts or ts <= 0:
             return None

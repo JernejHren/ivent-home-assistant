@@ -82,6 +82,35 @@ async def test_sensor_updates(hass: HomeAssistant, mock_config_entry, mock_api_c
     rssi_state = hass.states.get("sensor.enota_1_signal")
     assert rssi_state.state == "-70"
 
+async def test_special_mode_ends_at_cleared_when_mode_off(hass: HomeAssistant, mock_config_entry, mock_api_client):
+    """A stale end timestamp is not shown once the special mode is cancelled."""
+    _enable_sensors(hass, mock_config_entry)
+    await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    from .conftest import MOCK_INFO_DATA
+    import copy
+    coordinator = mock_config_entry.runtime_data.coordinator
+
+    # Boost active: the end time is reported
+    new_data = copy.deepcopy(MOCK_INFO_DATA)
+    new_data["groups"][0]["remote"]["special_mode"] = "IVentBoost"
+    new_data["groups"][0]["remote"]["special_mode_ends_at"] = 1700003600
+    mock_api_client.async_get_info.return_value = new_data
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    ends_at_state = hass.states.get("sensor.dnevna_soba_special_mode_ends_at")
+    assert "2023-11-14" in ends_at_state.state
+
+    # Mode cancelled, timestamp left behind by the API: the sensor is cleared
+    new_data = copy.deepcopy(new_data)
+    new_data["groups"][0]["remote"]["special_mode"] = "IVentSpecialOff"
+    mock_api_client.async_get_info.return_value = new_data
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    ends_at_state = hass.states.get("sensor.dnevna_soba_special_mode_ends_at")
+    assert ends_at_state.state == "unknown"
+
 
 async def test_cloud_mode_sensor(hass, mock_config_entry, mock_api_client):
     from homeassistant.helpers import entity_registry as er
